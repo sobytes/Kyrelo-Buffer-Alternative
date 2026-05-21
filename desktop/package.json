@@ -11,11 +11,13 @@
     "typecheck": "tsc --noEmit",
     "worker": "node worker/index.mjs",
     "desktop": "electron .",
-    "pw:install": "PLAYWRIGHT_BROWSERS_PATH=$PWD/build/pw-browsers npx playwright install chromium && rm -rf build/pw-browsers/chromium_headless_shell-* build/pw-browsers/ffmpeg-*",
+    "pw:install": "node scripts/pw-install.mjs",
     "pack": "npm run build && npm run pw:install && SKIP_NOTARIZE=true electron-builder --dir",
     "dist": "npm run build && npm run pw:install && electron-builder",
     "release:mac": "node scripts/release-mac.js",
     "release:mac:test": "node scripts/release-mac.js --test",
+    "release:win": "node scripts/release-win.js",
+    "release:win:test": "node scripts/release-win.js --test",
     "icon": "node scripts/generate-icon.mjs"
   },
   "dependencies": {
@@ -75,7 +77,19 @@
       "notarize": true
     },
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "build/icon.png",
+      "publisherName": "Sobytes Ltd",
+      "signingHashAlgorithms": ["sha256"],
+      "rfc3161TimeStampServer": "http://timestamp.sectigo.com"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Kyrelo"
     },
     "linux": {
       "target": "AppImage"

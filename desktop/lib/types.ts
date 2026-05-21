@@ -48,6 +48,8 @@ export interface ScheduledPost {
   /** Account ID this post is sent from (XAccount.id). Optional for legacy posts. */
   accountId?: string;
   text: string;
+  /** Filename inside .data/uploads/ — set when the user attached an image. */
+  imagePath?: string;
   scheduledFor: string;
   createdAt: string;
   status: ScheduledStatus;

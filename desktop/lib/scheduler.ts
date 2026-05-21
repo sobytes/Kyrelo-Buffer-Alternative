@@ -1,3 +1,4 @@
+import path from "node:path";
 import {
   deleteScheduledPost,
   getGrokSettings,
@@ -57,7 +58,9 @@ export async function runDueScheduledPosts(): Promise<DispatchOutcome> {
     await upsertScheduledPost(post);
     console.log(`[scheduler] posting id=${post.id} via account=${accountId}`);
     try {
-      const r = await postTweetBrowser(accountId, post.text, { headless });
+      const root = process.env.STORAGE_DIR ?? path.join(process.cwd(), ".data");
+      const imagePath = post.imagePath ? path.join(root, "uploads", post.imagePath) : undefined;
+      const r = await postTweetBrowser(accountId, post.text, { headless, imagePath });
       post.status = "posted";
       post.postedAt = new Date().toISOString();
       post.postedUrl = r.url;
@@ -81,6 +84,7 @@ export async function createScheduledPost(input: {
   platform: ScheduledPost["platform"];
   accountId: string;
   text: string;
+  imagePath?: string;
   scheduledFor: string;
 }): Promise<ScheduledPost> {
   const post: ScheduledPost = {
@@ -88,6 +92,7 @@ export async function createScheduledPost(input: {
     platform: input.platform,
     accountId: input.accountId,
     text: input.text,
+    imagePath: input.imagePath,
     scheduledFor: input.scheduledFor,
     createdAt: new Date().toISOString(),
     status: "pending",

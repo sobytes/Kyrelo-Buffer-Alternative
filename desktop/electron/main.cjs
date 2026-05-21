@@ -144,7 +144,11 @@ function createWindow() {
   });
   mainWindow.loadURL(`${appUrl}/detector`);
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    // Only ever let http(s) URLs escape to the OS; refuse file://, javascript:,
+    // mailto:, etc. in case any user-facing copy ends up containing one.
+    if (typeof url === "string" && /^https?:\/\//i.test(url)) {
+      shell.openExternal(url);
+    }
     return { action: "deny" };
   });
   mainWindow.on("closed", () => {

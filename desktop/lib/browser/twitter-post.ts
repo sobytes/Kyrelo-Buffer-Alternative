@@ -28,7 +28,7 @@ const SUBMIT_SELECTORS = [
 export async function postTweetBrowser(
   accountId: string,
   text: string,
-  options: { headless?: boolean } = {},
+  options: { headless?: boolean; imagePath?: string } = {},
 ): Promise<PostResult> {
   // Default visible so the user can watch the post happen live; flip via the
   // Settings toggle for fully background operation.
@@ -92,6 +92,26 @@ export async function postTweetBrowser(
 
     await composer.click();
     await jitter(300, 800);
+
+    if (options.imagePath) {
+      console.log(`[twitter-post] attaching image: ${options.imagePath}`);
+      const fileInput = page.locator('input[data-testid="fileInput"]').first();
+      try {
+        await fileInput.waitFor({ state: "attached", timeout: 5_000 });
+        await fileInput.setInputFiles(options.imagePath);
+        // Wait for the attached-image preview to render.
+        await page
+          .locator('[data-testid="attachments"]')
+          .first()
+          .waitFor({ state: "visible", timeout: 20_000 });
+        console.log("[twitter-post] image upload preview ready");
+        await jitter(700, 1400);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new Error(`Couldn't attach image: ${msg}`);
+      }
+    }
+
     await humanType(page, text);
     await jitter(800, 1500);
 
