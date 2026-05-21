@@ -207,4 +207,15 @@ app.on("before-quit", () => {
       } catch {}
     }
   }
+  // Killing nextProc doesn't cascade to the headless browsers Playwright
+  // spawned under it — they'd linger and lock the profile dir. Sweep them.
+  try {
+    if (process.platform === "win32") {
+      spawn("taskkill", ["/F", "/T", "/IM", "chrome-headless-shell.exe"], {
+        stdio: "ignore",
+      });
+    } else {
+      spawn("pkill", ["-f", "chrome-headless-shell"], { stdio: "ignore" });
+    }
+  } catch {}
 });

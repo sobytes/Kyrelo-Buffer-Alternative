@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { BrowserContext, chromium, Page } from "playwright";
@@ -109,6 +110,32 @@ async function clearStaleProfileLocks(dir: string) {
   }
 }
 
+// A leaked scrape browser (chrome-headless-shell) — from a crashed scrape or
+// an unclean app shutdown — keeps its profile dir locked, so the next launch
+// dies with "Target page, context or browser has been closed". Kill any stray
+// headless shell before launching so a leak can never block us. Safe: that
+// process name is exclusively Playwright's headless browser — it is never the
+// user's own Chrome (chrome.exe). Always resolves; never throws into caller.
+function killStrayHeadlessShells(): Promise<void> {
+  return new Promise((resolve) => {
+    const [cmd, args]: [string, string[]] =
+      process.platform === "win32"
+        ? ["taskkill", ["/F", "/T", "/IM", "chrome-headless-shell.exe"]]
+        : ["pkill", ["-f", "chrome-headless-shell"]];
+    try {
+      execFile(cmd, args, (_err, stdout) => {
+        const killed = (String(stdout).match(/SUCCESS/g) ?? []).length;
+        if (killed > 0) {
+          console.log(`[session] swept ${killed} stray headless browser(s) before launch`);
+        }
+        resolve();
+      });
+    } catch {
+      resolve();
+    }
+  });
+}
+
 export async function openBrowser(
   platform: string,
   opts: OpenOptions,
@@ -121,6 +148,7 @@ export async function openBrowser(
   const release = await acquireBrowserLock(lockKey);
   try {
     await fs.mkdir(dir, { recursive: true });
+    await killStrayHeadlessShells();
     await clearStaleProfileLocks(dir);
 
     // launchPersistentContext = the browser thinks it's "your normal Chrome with
