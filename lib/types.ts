@@ -36,3 +36,28 @@ export interface GrokState {
   lastCheckedAt?: string;
   tweets: SeenTweet[];
 }
+
+export type ScheduledPlatform = "twitter";
+export type ScheduledStatus = "pending" | "posting" | "posted" | "failed";
+
+export interface ScheduledPost {
+  id: string;
+  platform: ScheduledPlatform;
+  /** Account ID this post is sent from (XAccount.id). Optional for legacy posts. */
+  accountId?: string;
+  text: string;
+  scheduledFor: string;
+  createdAt: string;
+  status: ScheduledStatus;
+  postedAt?: string;
+  postedUrl?: string;
+  error?: string;
+}
+
+export interface XAccount {
+  /** Lowercased handle. Also the name of the Chrome profile dir on disk. */
+  id: string;
+  /** Handle as captured from X, preserving case. */
+  handle: string;
+  addedAt: string;
+}

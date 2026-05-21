@@ -1,10 +1,12 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { ApiKeys, GrokSettings, GrokState } from "./types";
+import { ApiKeys, GrokSettings, GrokState, ScheduledPost, XAccount } from "./types";
 
 const GROK_SETTINGS_KEY = "grok-settings";
 const GROK_STATE_KEY = "grok-state";
 const API_KEYS_KEY = "api-keys";
+const SCHEDULED_POSTS_KEY = "scheduled-posts";
+const X_ACCOUNTS_KEY = "x-accounts";
 
 const dataDir = process.env.STORAGE_DIR ?? path.join(process.cwd(), ".data");
 
@@ -78,4 +80,33 @@ export async function getApiKeys(): Promise<ApiKeys> {
 
 export async function saveApiKeys(keys: ApiKeys): Promise<void> {
   await write(API_KEYS_KEY, keys);
+}
+
+export async function listScheduledPosts(): Promise<ScheduledPost[]> {
+  return (await read<ScheduledPost[]>(SCHEDULED_POSTS_KEY)) ?? [];
+}
+
+export async function saveScheduledPosts(posts: ScheduledPost[]): Promise<void> {
+  await write(SCHEDULED_POSTS_KEY, posts);
+}
+
+export async function upsertScheduledPost(post: ScheduledPost): Promise<void> {
+  const all = await listScheduledPosts();
+  const idx = all.findIndex((p) => p.id === post.id);
+  if (idx >= 0) all[idx] = post;
+  else all.push(post);
+  await saveScheduledPosts(all);
+}
+
+export async function deleteScheduledPost(id: string): Promise<void> {
+  const all = await listScheduledPosts();
+  await saveScheduledPosts(all.filter((p) => p.id !== id));
+}
+
+export async function listXAccounts(): Promise<XAccount[]> {
+  return (await read<XAccount[]>(X_ACCOUNTS_KEY)) ?? [];
+}
+
+export async function saveXAccounts(accounts: XAccount[]): Promise<void> {
+  await write(X_ACCOUNTS_KEY, accounts);
 }

@@ -64,7 +64,7 @@ function useConnect(): ConnectState {
 
   async function refresh() {
     const r = await fetch("/api/twitter-connect").then((r) => r.json());
-    setConnected(!!r.connected);
+    setConnected(Array.isArray(r.accounts) && r.accounts.length > 0);
     setPhase((p) => (r.connecting && p === "idle" ? "connecting" : p));
   }
 

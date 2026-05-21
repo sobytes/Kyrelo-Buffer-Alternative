@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   cancelTwitterConnect,
-  disconnectTwitter,
+  disconnectXAccount,
   endTwitterConnect,
   isConnectActive,
-  isLoggedIn,
+  listXConnectedAccounts,
   startTwitterConnect,
 } from "@/lib/twitter-connect";
 
@@ -12,14 +12,18 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 export async function GET() {
+  const accounts = await listXConnectedAccounts();
   return NextResponse.json({
-    connected: await isLoggedIn(),
+    accounts,
     connecting: isConnectActive(),
   });
 }
 
 export async function POST(req: NextRequest) {
-  const body = (await req.json().catch(() => ({}))) as { action?: string };
+  const body = (await req.json().catch(() => ({}))) as {
+    action?: string;
+    accountId?: string;
+  };
   if (body.action === "start") {
     return NextResponse.json(await startTwitterConnect());
   }
@@ -30,7 +34,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(await cancelTwitterConnect());
   }
   if (body.action === "disconnect") {
-    return NextResponse.json(await disconnectTwitter());
+    if (!body.accountId) {
+      return NextResponse.json({ error: "accountId required" }, { status: 400 });
+    }
+    return NextResponse.json(await disconnectXAccount(body.accountId));
   }
   return NextResponse.json({ error: "unknown action" }, { status: 400 });
 }

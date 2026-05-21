@@ -1,5 +1,5 @@
 {
-  "name": "x-detector",
+  "name": "kyrelo",
   "version": "0.1.0",
   "private": true,
   "main": "electron/main.cjs",
@@ -10,8 +10,11 @@
     "worker": "node worker/index.mjs",
     "desktop": "electron .",
     "pw:install": "PLAYWRIGHT_BROWSERS_PATH=$PWD/build/pw-browsers npx playwright install chromium",
-    "pack": "npm run build && npm run pw:install && electron-builder --dir",
-    "dist": "npm run build && npm run pw:install && electron-builder"
+    "pack": "npm run build && npm run pw:install && SKIP_NOTARIZE=true electron-builder --dir",
+    "dist": "npm run build && npm run pw:install && electron-builder",
+    "release:mac": "node scripts/release-mac.js",
+    "release:mac:test": "node scripts/release-mac.js --test",
+    "icon": "node scripts/generate-icon.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.40.0",
@@ -21,10 +24,12 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@electron/notarize": "^3.1.1",
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "autoprefixer": "^10.4.20",
+    "dotenv": "^17.4.2",
     "electron": "^42.1.0",
     "electron-builder": "^25.1.8",
     "postcss": "^8.4.49",
@@ -32,8 +37,8 @@
     "typescript": "^5.7.2"
   },
   "build": {
-    "appId": "com.sobytes.xdetector",
-    "productName": "X Detector",
+    "appId": "com.sobytes.kyrelo",
+    "productName": "kyrelo",
     "asar": false,
     "directories": {
       "buildResources": "build",
@@ -50,13 +55,22 @@
       {
         "from": "build/pw-browsers",
         "to": "pw-browsers",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       }
     ],
+    "afterSign": "build/afterSign.js",
     "mac": {
       "category": "public.app-category.developer-tools",
       "target": "dmg",
-      "identity": null
+      "icon": "build/icon.icns",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "identity": "SOBYTES LTD (FT97GD7996)",
+      "notarize": true
     },
     "win": {
       "target": "nsis"

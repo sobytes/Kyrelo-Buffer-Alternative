@@ -1,6 +1,6 @@
 import { generateGrokQuestion } from "./ai";
 import { getGrokSettings, getGrokState, saveGrokState } from "./storage";
-import { isConnectActive, isLoggedIn } from "./twitter-connect";
+import { getDefaultAccountId, isConnectActive } from "./twitter-connect";
 import { SeenTweet } from "./types";
 
 function mergeSeen(existing: SeenTweet[], fresh: SeenTweet[]): SeenTweet[] {
@@ -37,7 +37,8 @@ export async function runGrokWatcher(): Promise<WatchResult> {
   const settings = await getGrokSettings();
   if (!settings.enabled) return { skipped: "disabled" };
   if (isConnectActive()) return { skipped: "connecting" };
-  if (!(await isLoggedIn())) return { skipped: "not-logged-in" };
+  const accountId = await getDefaultAccountId();
+  if (!accountId) return { skipped: "no-account" };
   const handles = settings.handles.filter(Boolean);
   if (handles.length === 0) return { skipped: "no-handles" };
 
@@ -50,6 +51,7 @@ export async function runGrokWatcher(): Promise<WatchResult> {
   let scraped;
   try {
     scraped = await scrapeManyTimelines({
+      accountId,
       handles,
       includeReplies: settings.includeReplies,
       limit: 12,

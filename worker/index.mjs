@@ -30,6 +30,7 @@ loadEnvFile(".env");
 
 const baseUrl = process.env.APP_URL ?? "http://localhost:3000";
 const intervalMs = Number(process.env.WORKER_GROK_INTERVAL_MS ?? 90_000);
+const schedulerIntervalMs = Number(process.env.WORKER_SCHEDULER_INTERVAL_MS ?? 30_000);
 
 async function hit(path) {
   const res = await fetch(`${baseUrl}${path}`);
@@ -65,6 +66,25 @@ async function tick() {
   }
 }
 
-console.log(`Worker started. Polling ${baseUrl}/api/cron/watch-grok every ${intervalMs / 1000}s.`);
+async function schedulerTick() {
+  try {
+    const { body } = await hit("/api/cron/scheduler");
+    const json = JSON.parse(body);
+    if (json.posted > 0) {
+      macNotify("Scheduled post sent", `${json.posted} post${json.posted === 1 ? "" : "s"} posted to X.`);
+    }
+    if (json.failed > 0) {
+      macNotify("Scheduled post failed", `${json.failed} post${json.failed === 1 ? "" : "s"} failed.`);
+    }
+  } catch (err) {
+    console.error("scheduler tick failed", err);
+  }
+}
+
+console.log(
+  `Worker started. watch-grok every ${intervalMs / 1000}s, scheduler every ${schedulerIntervalMs / 1000}s.`,
+);
 await tick();
+await schedulerTick();
 setInterval(tick, intervalMs);
+setInterval(schedulerTick, schedulerIntervalMs);

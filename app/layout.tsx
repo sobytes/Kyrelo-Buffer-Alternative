@@ -3,7 +3,7 @@ import "./globals.css";
 import { AppShell } from "@/components/AppShell";
 
 export const metadata: Metadata = {
-  title: "X Detector",
+  title: "kyrelo",
   description: "Watch X handles and reply with @grok from a local desktop app.",
 };
 

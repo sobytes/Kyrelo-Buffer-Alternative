@@ -1,20 +1,21 @@
 "use client";
 import { useEffect, useState } from "react";
+import { XAccount } from "@/lib/types";
 
 type Phase = "idle" | "starting" | "connecting" | "saving";
 
-interface Status {
-  connected: boolean;
+interface ConnectState {
+  accounts: XAccount[];
   connecting: boolean;
 }
 
 export function ConnectedPanel() {
-  const [status, setStatus] = useState<Status | null>(null);
+  const [state, setState] = useState<ConnectState | null>(null);
   const [phase, setPhase] = useState<Phase>("idle");
 
   async function refresh() {
-    const r = (await fetch("/api/twitter-connect").then((r) => r.json())) as Status;
-    setStatus(r);
+    const r = (await fetch("/api/twitter-connect").then((r) => r.json())) as ConnectState;
+    setState(r);
     setPhase((p) => (r.connecting && p === "idle" ? "connecting" : p));
   }
 
@@ -65,59 +66,64 @@ export function ConnectedPanel() {
     refresh();
   }
 
-  async function disconnect() {
+  async function disconnect(account: XAccount) {
     if (
       !confirm(
-        "Disconnect from X? This wipes the saved Chrome session — you'll need to log in again next time.",
+        `Disconnect @${account.handle}? This wipes the saved Chrome session — you'll need to log in again to re-add it.`,
       )
     )
       return;
     const r = await fetch("/api/twitter-connect", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "disconnect" }),
+      body: JSON.stringify({ action: "disconnect", accountId: account.id }),
     }).then((r) => r.json());
     if (r.error) alert(r.error);
     refresh();
   }
 
-  const connecting = phase !== "idle" || status?.connecting;
-  const connected = !!status?.connected;
+  if (!state) {
+    return <div className="card text-sm text-zinc-500">Loading…</div>;
+  }
+
+  const isConnecting = phase !== "idle" || state.connecting;
 
   return (
     <div className="space-y-4">
-      <div className="card">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-black/40 text-lg font-bold text-zinc-100">
-              𝕏
-            </div>
-            <div>
-              <div className="text-sm font-semibold text-zinc-100">X (Twitter)</div>
-              <div className="mt-0.5 text-xs text-zinc-500">
-                {connected
-                  ? "Session saved — used for scraping handles and posting replies."
-                  : connecting
-                    ? phase === "starting"
-                      ? "Opening Chrome…"
-                      : phase === "saving"
-                        ? "Saving session…"
-                        : "Log in to X in the Chrome window that opened."
-                    : "Sign in once. The session is stored locally in your Chrome profile."}
-              </div>
+      {state.accounts.length > 0 ? (
+        <div className="space-y-2">
+          {state.accounts.map((a) => (
+            <AccountRow key={a.id} account={a} onDisconnect={() => disconnect(a)} />
+          ))}
+        </div>
+      ) : (
+        <div className="card text-sm text-zinc-500">
+          No X accounts connected yet.
+        </div>
+      )}
+
+      <div className="card space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-sm font-semibold text-zinc-100">Add an X account</div>
+            <div className="mt-0.5 text-xs text-zinc-500">
+              {phase === "starting"
+                ? "Opening Chrome…"
+                : phase === "connecting"
+                  ? "Log in to X in the Chrome window that opened. You can use email/username — Google blocks automated browsers."
+                  : phase === "saving"
+                    ? "Saving session…"
+                    : "Connect opens Chrome to x.com/login. Sign in once and the session is saved to its own profile directory."}
             </div>
           </div>
-
-          <StatusPill connected={connected} connecting={!!connecting} />
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          {!connected && !connecting && (
+        <div className="flex flex-wrap items-center gap-2">
+          {phase === "idle" && !state.connecting && (
             <button onClick={start} className="btn-primary text-sm">
               Connect with X
             </button>
           )}
-
           {phase === "connecting" && (
             <>
               <button onClick={done} className="btn-primary text-sm">
@@ -128,47 +134,59 @@ export function ConnectedPanel() {
               </button>
             </>
           )}
-
-          {connected && !connecting && (
-            <button onClick={disconnect} className="btn-danger text-sm">
-              Disconnect
+          {phase === "starting" && (
+            <button disabled className="btn-ghost text-sm">
+              Starting…
+            </button>
+          )}
+          {phase === "saving" && (
+            <button disabled className="btn-ghost text-sm">
+              Saving…
             </button>
           )}
         </div>
+
+        {isConnecting && (
+          <p className="text-[10px] text-zinc-500">
+            Connecting in progress — scrapes and scheduled posts pause until it finishes.
+          </p>
+        )}
       </div>
 
       <div className="card text-xs leading-relaxed text-zinc-500">
-        <strong className="text-zinc-300">How this works.</strong> Connecting opens a real Chrome
-        window pointed at <code className="text-zinc-300">x.com/login</code>. After you sign in,
-        Chrome saves the auth cookie to a profile directory on this machine. The detector then
-        opens that same profile in headless mode to read timelines. No credentials are sent
+        <strong className="text-zinc-300">How this works.</strong> Each account gets its own
+        Chrome profile under <code className="text-zinc-300">.data/userdata/twitter/&lt;handle&gt;/</code>.
+        The detector reads timelines through the first connected account; scheduled posts go
+        through whichever account you pick on the Scheduler page. No credentials are sent
         anywhere except X.com itself.
       </div>
     </div>
   );
 }
 
-function StatusPill({ connected, connecting }: { connected: boolean; connecting: boolean }) {
-  if (connecting) {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-1 text-[11px] font-medium text-amber-300">
-        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" />
-        connecting
-      </span>
-    );
-  }
-  if (connected) {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-live/10 px-2.5 py-1 text-[11px] font-medium text-emerald-300">
-        <span className="h-1.5 w-1.5 rounded-full bg-live" />
-        connected
-      </span>
-    );
-  }
+function AccountRow({
+  account,
+  onDisconnect,
+}: {
+  account: XAccount;
+  onDisconnect: () => void;
+}) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-zinc-800/60 px-2.5 py-1 text-[11px] font-medium text-zinc-400">
-      <span className="h-1.5 w-1.5 rounded-full bg-zinc-600" />
-      not connected
-    </span>
+    <div className="card flex items-center justify-between gap-3">
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-md bg-black/40 text-lg font-bold text-zinc-100">
+          𝕏
+        </div>
+        <div>
+          <div className="text-sm font-semibold text-zinc-100">@{account.handle}</div>
+          <div className="text-[11px] text-zinc-500">
+            Added {new Date(account.addedAt).toLocaleDateString()}
+          </div>
+        </div>
+      </div>
+      <button onClick={onDisconnect} className="btn-danger text-xs">
+        Disconnect
+      </button>
+    </div>
   );
 }

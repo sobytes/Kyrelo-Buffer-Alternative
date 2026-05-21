@@ -34,9 +34,7 @@ export interface ScrapeOptions {
 function assertLoggedIn(page: Page) {
   const url = page.url();
   if (url.includes("/login") || url.includes("/i/flow/login")) {
-    // Best-effort clear of the connected marker — don't block the throw.
-    void import("../twitter-connect").then((m) => m.clearLoggedIn()).catch(() => {});
-    throw new Error("X session expired. Click \"Connect with X\" to log in again.");
+    throw new Error("X session expired. Reconnect under Connected accounts.");
   }
 }
 
@@ -133,6 +131,7 @@ async function scrapeOnPage(
 }
 
 export interface MultiScrapeOptions {
+  accountId: string;
   handles: string[];
   includeReplies: boolean;
   limit?: number;
@@ -146,7 +145,10 @@ export async function scrapeManyTimelines(
   const handles = opts.handles.map((h) => h.replace(/^@/, "")).filter(Boolean);
 
   // Scrapes run headless so the polling browser doesn't pop up every tick.
-  const browser = await openBrowser("twitter", { headless: true });
+  const browser = await openBrowser("twitter", {
+    headless: true,
+    accountId: opts.accountId,
+  });
   const { page } = browser;
   const out: ScrapedTweet[] = [];
   try {

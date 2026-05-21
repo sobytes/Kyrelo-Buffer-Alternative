@@ -7,8 +7,8 @@ const USERDATA_ROOT = path.join(
   "userdata",
 );
 
-function userDataDir(platform: string): string {
-  return path.join(USERDATA_ROOT, platform);
+export function userDataDir(platform: string, accountId: string): string {
+  return path.join(USERDATA_ROOT, platform, accountId);
 }
 
 export interface BrowserHandle {
@@ -19,6 +19,8 @@ export interface BrowserHandle {
 
 export interface OpenOptions {
   headless?: boolean;
+  /** Per-account profile directory under .data/userdata/<platform>/<accountId>/. */
+  accountId: string;
 }
 
 const UA =
@@ -109,13 +111,14 @@ async function clearStaleProfileLocks(dir: string) {
 
 export async function openBrowser(
   platform: string,
-  opts: OpenOptions = {},
+  opts: OpenOptions,
 ): Promise<BrowserHandle> {
   const headless = opts.headless ?? process.env.BROWSER_HEADLESS !== "false";
   const channel = process.env.BROWSER_CHANNEL ?? "chrome";
-  const dir = userDataDir(platform);
+  const dir = userDataDir(platform, opts.accountId);
+  const lockKey = `${platform}:${opts.accountId}`;
 
-  const release = await acquireBrowserLock(platform);
+  const release = await acquireBrowserLock(lockKey);
   try {
     await fs.mkdir(dir, { recursive: true });
     await clearStaleProfileLocks(dir);

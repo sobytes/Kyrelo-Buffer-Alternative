@@ -58,9 +58,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <aside className="fixed inset-y-0 left-0 z-30 flex w-56 flex-col border-r border-line bg-panel/95 backdrop-blur-xl">
         <div className="window-drag flex items-center gap-2.5 px-5 pb-4 pt-10 border-b border-line">
           <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-accent to-live shadow-[0_4px_16px_-6px_rgba(124,92,255,0.7)]">
-            <span className="text-sm font-bold text-white">X</span>
+            <span className="text-sm font-bold lowercase text-white">k</span>
           </div>
-          <span className="text-sm font-semibold tracking-tight text-zinc-100">Detector</span>
+          <span className="text-sm font-semibold tracking-tight text-zinc-100">kyrelo</span>
         </div>
 
         <nav className="flex-1 space-y-0.5 p-2">
