@@ -51,6 +51,7 @@
     "files": [
       "electron/**/*",
       ".next/**/*",
+      "public/**/*",
       "worker/**/*",
       "next.config.mjs",
       "package.json"
