@@ -27,6 +27,7 @@
 
 const { execSync } = require("node:child_process");
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 
 require("dotenv").config({ path: path.join(__dirname, "../.env.local") });
@@ -181,6 +182,58 @@ function uploadRelease(version) {
       `--generate-notes`,
   );
   console.log("");
+
+  updateReleaseNotes(version);
+}
+
+/**
+ * Rewrite the release body with a "Platforms in this release" banner above
+ * the auto-generated changelog. Detects which artifacts are actually attached
+ * (so if release:mac runs first, only the macOS row shows ✅; if release:win
+ * later adds the .exe, re-running release:win updates the banner to show
+ * both).
+ */
+function updateReleaseNotes(version) {
+  try {
+    const assetsJson = execSync(
+      `gh release view v${version} --json assets -q '[.assets[].name]'`,
+      { encoding: "utf8" },
+    );
+    const names = JSON.parse(assetsJson) || [];
+    const hasMac = names.some((n) => n.endsWith(".dmg"));
+    const hasWin = names.some((n) => n.endsWith(".exe"));
+
+    const currentBody = execSync(
+      `gh release view v${version} --json body -q .body`,
+      { encoding: "utf8" },
+    ).trimStart();
+
+    // Strip any previous banner we wrote so repeated runs don't stack.
+    const stripped = currentBody.replace(/^### Platforms[\s\S]*?\n---\n+/, "");
+
+    const banner = [
+      "### Platforms",
+      "",
+      `- 🍎 **macOS** (Apple Silicon, signed & notarized) ${hasMac ? "✅" : "— not in this release"}`,
+      `- 🪟 **Windows** (10/11 x64, signed) ${hasWin ? "✅" : "— not in this release"}`,
+      "",
+      "Pick your installer from **Assets** below.",
+      "",
+      "---",
+      "",
+    ].join("\n");
+
+    const newBody = banner + stripped;
+    const tmp = path.join(os.tmpdir(), `kyrelo-notes-${Date.now()}.md`);
+    fs.writeFileSync(tmp, newBody);
+    try {
+      run(`gh release edit v${version} --notes-file "${tmp}"`);
+    } finally {
+      fs.rmSync(tmp, { force: true });
+    }
+  } catch (err) {
+    console.warn(`Couldn't update release notes: ${err.message}`);
+  }
 }
 
 async function main() {

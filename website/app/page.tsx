@@ -2,7 +2,7 @@ import Image from "next/image";
 
 const GITHUB_URL =
   "https://github.com/sobytes/Kyrelo-Buffer-Alternative";
-const RELEASES_URL = `${GITHUB_URL}/releases/latest`;
+const RELEASES_URL = `${GITHUB_URL}/releases`;
 
 export default function Home() {
   return (
