@@ -146,8 +146,8 @@ export async function openBrowser(
         /chrome|channel/i.test(err.message)
       ) {
         console.warn(
-          "[browser] Real Chrome not installed — falling back to bundled Chromium. " +
-            "Install Google Chrome for stronger fingerprint match.",
+          `[browser] Couldn't launch real Chrome via channel="${channel}" — ` +
+            `falling back to bundled Chromium. Actual launch error: ${err.message}`,
         );
         context = await chromium.launchPersistentContext(dir, {
           headless,
