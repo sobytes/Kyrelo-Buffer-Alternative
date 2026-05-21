@@ -158,7 +158,7 @@ async function main() {
     console.log("  App: dist/mac-arm64/kyrelo.app");
     console.log("  (Not notarized — Gatekeeper will warn.)");
   } else {
-    console.log(`  Release: https://github.com/samueleastdev/BufferClone-Desktop-App-VybeCoding-and-Contribute/releases/tag/v${version}`);
+    console.log(`  Release: https://github.com/samueleastdev/Kyrelo-Buffer-Alternative-Desktop-App-VybeCoding-and-Contribute/releases/tag/v${version}`);
   }
   console.log("========================================\n");
 }
