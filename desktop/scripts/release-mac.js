@@ -120,6 +120,15 @@ function bumpVersion() {
 }
 
 function build() {
+  // Always start with a clean dist/ — electron-builder appends to it, so
+  // stale .dmgs from previous versions would otherwise get picked up by
+  // uploadRelease() and re-uploaded against the new tag.
+  const distDir = path.join(__dirname, "../dist");
+  if (fs.existsSync(distDir)) {
+    console.log("Cleaning dist/ …");
+    fs.rmSync(distDir, { recursive: true, force: true });
+  }
+
   console.log("Building Next + downloading Playwright Chromium…");
   run("npm run build");
   run("npm run pw:install");
@@ -146,12 +155,20 @@ function build() {
 
 function uploadRelease(version) {
   const distDir = path.join(__dirname, "../dist");
+  // Only ship artifacts that belong to *this* version. latest-mac.yml is
+  // version-agnostic but always the current build's, so it's always included.
   const files = fs
     .readdirSync(distDir)
-    .filter((f) => f.endsWith(".dmg") || f.endsWith(".dmg.blockmap") || f === "latest-mac.yml")
+    .filter((f) => {
+      if (f === "latest-mac.yml") return true;
+      if (!f.endsWith(".dmg") && !f.endsWith(".dmg.blockmap")) return false;
+      return f.includes(`-${version}-`);
+    })
     .map((f) => path.join(distDir, f));
 
-  if (files.length === 0) fail("No .dmg files in dist/. Build failed?");
+  if (!files.some((f) => f.endsWith(".dmg"))) {
+    fail(`No .dmg for version ${version} in dist/. Build failed?`);
+  }
 
   console.log("\nPushing version commit and tag…");
   run("git push origin HEAD --follow-tags");

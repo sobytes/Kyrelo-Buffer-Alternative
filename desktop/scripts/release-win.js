@@ -108,6 +108,14 @@ function validate() {
 }
 
 function build() {
+  // Always start with a clean dist/ — electron-builder appends, so stale
+  // .exes from previous versions would otherwise sneak into the upload.
+  const distDir = path.join(__dirname, "../dist");
+  if (fs.existsSync(distDir)) {
+    console.log("Cleaning dist/ …");
+    fs.rmSync(distDir, { recursive: true, force: true });
+  }
+
   console.log("Building Next + installing Playwright Chromium…");
   run("npm run build");
   run("npm run pw:install");
