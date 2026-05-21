@@ -33,6 +33,7 @@ const DEFAULT_GROK_SETTINGS: GrokSettings = {
   styleHint:
     "Take a sharp devil's-advocate angle. Question an assumption, surface a downside, or argue the opposite is true.",
   notifyDesktop: true,
+  headlessPosting: false,
 };
 
 export async function getGrokSettings(): Promise<GrokSettings> {

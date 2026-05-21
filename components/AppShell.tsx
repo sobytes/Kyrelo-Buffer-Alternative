@@ -57,9 +57,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen">
       <aside className="fixed inset-y-0 left-0 z-30 flex w-56 flex-col border-r border-line bg-panel/95 backdrop-blur-xl">
         <div className="window-drag flex items-center gap-2.5 px-5 pb-4 pt-10 border-b border-line">
-          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-accent to-live shadow-[0_4px_16px_-6px_rgba(124,92,255,0.7)]">
-            <span className="text-sm font-bold text-white">K</span>
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/icon.png"
+            alt=""
+            className="h-7 w-7 rounded-md shadow-[0_4px_16px_-6px_rgba(124,92,255,0.7)]"
+          />
           <span className="text-sm font-semibold tracking-tight text-zinc-100">Kyrelo</span>
         </div>
 

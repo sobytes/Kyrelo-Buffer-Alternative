@@ -163,6 +163,26 @@ export function SettingsPanel() {
         </label>
       </section>
 
+      <section className="card space-y-3">
+        <div className="label">Posting</div>
+        <label className="flex items-center justify-between gap-3 text-sm text-zinc-300">
+          <div>
+            <div>Run scheduled posts headless</div>
+            <div className="mt-0.5 text-[11px] text-zinc-500">
+              When off, a Chrome window pops up so you can watch each post being typed and
+              submitted (useful for testing). Turn on once you trust it.
+            </div>
+          </div>
+          <input
+            type="checkbox"
+            checked={settings.headlessPosting ?? false}
+            onChange={(e) =>
+              save({ ...settings, headlessPosting: e.target.checked })
+            }
+          />
+        </label>
+      </section>
+
       <section className="card space-y-2">
         <div className="label">Danger zone</div>
         <button onClick={resetState} className="btn-danger w-full text-xs">

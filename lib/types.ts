@@ -12,6 +12,8 @@ export interface GrokSettings {
   aiProvider: AiProvider;
   styleHint: string;
   notifyDesktop: boolean;
+  /** When true, scheduled posts run with the browser hidden. Default: false (visible). */
+  headlessPosting?: boolean;
 }
 
 export interface SeenTweet {

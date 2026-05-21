@@ -118,3 +118,86 @@ export async function generateGrokQuestion(input: GrokQuestionInput): Promise<st
       : await generateGrokViaClaude(input);
   return clampGrokReply(raw);
 }
+
+const REWRITE_SYSTEM = `You rewrite social posts while preserving their core message.
+
+Hard rules:
+- Keep the same topic and core meaning. Do not change what's being said.
+- Reword sentences, vary the structure, swap a couple of word choices.
+- Stay within roughly 80–120% of the original length.
+- Same tone (casual stays casual, formal stays formal).
+- No em dashes. No emojis the original doesn't already use.
+- Output ONLY the rewritten post — no preamble, no quotes, no labels.`;
+
+function clampPostLength(text: string, max = 280): string {
+  let out = text.trim().replace(/^["']|["']$/g, "").trim();
+  out = out.replace(/[ \t]+/g, " ");
+  if (out.length > max) out = out.slice(0, max - 1).trimEnd() + "…";
+  return out;
+}
+
+export interface RewriteInput {
+  text: string;
+  provider: AiProvider;
+}
+
+async function rewriteViaClaude(text: string): Promise<string> {
+  const apiKey = await resolveAnthropicKey();
+  const anthropic = new Anthropic({ apiKey });
+  const message = await anthropic.messages.create({
+    model: MODEL,
+    max_tokens: 400,
+    system: [{ type: "text", text: REWRITE_SYSTEM, cache_control: { type: "ephemeral" } }],
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: `Rewrite this post:\n"""\n${text}\n"""`,
+          },
+        ],
+      },
+    ],
+  });
+  return message.content
+    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("\n");
+}
+
+async function rewriteViaOpenAI(text: string): Promise<string> {
+  const apiKey = await resolveOpenAiKey();
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      temperature: 0.9,
+      max_tokens: 400,
+      messages: [
+        { role: "system", content: REWRITE_SYSTEM },
+        { role: "user", content: `Rewrite this post:\n"""\n${text}\n"""` },
+      ],
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`OpenAI ${res.status}: ${body.slice(0, 300)}`);
+  }
+  const json = (await res.json()) as {
+    choices?: { message?: { content?: string } }[];
+  };
+  return json.choices?.[0]?.message?.content ?? "";
+}
+
+export async function rewritePost(input: RewriteInput): Promise<string> {
+  const raw =
+    input.provider === "openai"
+      ? await rewriteViaOpenAI(input.text)
+      : await rewriteViaClaude(input.text);
+  return clampPostLength(raw);
+}

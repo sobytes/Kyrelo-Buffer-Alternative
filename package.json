@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit",
     "worker": "node worker/index.mjs",
     "desktop": "electron .",
-    "pw:install": "PLAYWRIGHT_BROWSERS_PATH=$PWD/build/pw-browsers npx playwright install chromium",
+    "pw:install": "PLAYWRIGHT_BROWSERS_PATH=$PWD/build/pw-browsers npx playwright install chromium && rm -rf build/pw-browsers/chromium_headless_shell-* build/pw-browsers/ffmpeg-*",
     "pack": "npm run build && npm run pw:install && SKIP_NOTARIZE=true electron-builder --dir",
     "dist": "npm run build && npm run pw:install && electron-builder",
     "release:mac": "node scripts/release-mac.js",

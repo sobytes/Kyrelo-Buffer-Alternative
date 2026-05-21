@@ -165,7 +165,35 @@ export async function openBrowser(
 
     await context.addInitScript({ content: STEALTH_INIT });
 
+    // Inject cookies saved by the Connect flow.
+    const sidecar = path.join(dir, "kyrelo-cookies.json");
+    try {
+      const raw = await fs.readFile(sidecar, "utf8");
+      const parsed = JSON.parse(raw) as { cookies?: unknown };
+      if (Array.isArray(parsed.cookies) && parsed.cookies.length > 0) {
+        await context.addCookies(parsed.cookies as Parameters<typeof context.addCookies>[0]);
+        const hasAuth = (parsed.cookies as { name?: string }[]).some((c) => c.name === "auth_token");
+        console.log(
+          `[session] openBrowser(${platform}/${opts.accountId}): injected ${parsed.cookies.length} cookies, auth_token=${hasAuth}`,
+        );
+      } else {
+        console.log(
+          `[session] openBrowser(${platform}/${opts.accountId}): sidecar exists but empty`,
+        );
+      }
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === "ENOENT") {
+        console.log(`[session] openBrowser(${platform}/${opts.accountId}): no cookie sidecar`);
+      } else {
+        console.warn(`[session] sidecar read failed:`, err);
+      }
+    }
+
     const page = context.pages()[0] ?? (await context.newPage());
+    console.log(
+      `[session] openBrowser(${platform}/${opts.accountId}): ready, headless=${headless}`,
+    );
 
     return {
       context,
@@ -187,6 +215,46 @@ export async function openBrowser(
 export function jitter(min: number, max: number): Promise<void> {
   const ms = min + Math.random() * (max - min);
   return new Promise((r) => setTimeout(r, ms));
+}
+
+function keystrokeDelay(): number {
+  const r = Math.random();
+  if (r < 0.82) return 55 + Math.random() * 80;     // normal flow: 55–135ms
+  if (r < 0.96) return 180 + Math.random() * 220;   // small pauses: 180–400ms
+  return 500 + Math.random() * 700;                 // rare longer pause: 0.5–1.2s
+}
+
+/**
+ * Type into the focused element with realistic, variable per-key timing plus
+ * pauses after punctuation and the occasional "thinking" gap. Doesn't simulate
+ * typos — the final text needs to match exactly.
+ */
+export async function humanType(
+  page: Page,
+  text: string,
+  opts: { thinkRate?: number; speed?: number } = {},
+): Promise<void> {
+  const thinkRate = opts.thinkRate ?? 0.035;
+  const speed = opts.speed ?? 1;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    const prev = text[i - 1] ?? "";
+
+    if (prev === "." || prev === "!" || prev === "?") {
+      await jitter(320 * speed, 760 * speed);
+    } else if (prev === "," || prev === ";" || prev === ":") {
+      await jitter(140 * speed, 320 * speed);
+    } else if (prev === "\n") {
+      await jitter(220 * speed, 600 * speed);
+    }
+
+    if (prev === " " && Math.random() < thinkRate) {
+      await jitter(700 * speed, 2200 * speed);
+    }
+
+    await page.keyboard.type(ch, { delay: keystrokeDelay() * speed });
+  }
 }
 
 // Browse the platform like a person about to scrape: scroll the feed, dwell,

@@ -1,5 +1,6 @@
 import {
   deleteScheduledPost,
+  getGrokSettings,
   listScheduledPosts,
   upsertScheduledPost,
 } from "./storage";
@@ -26,6 +27,7 @@ export async function runDueScheduledPosts(): Promise<DispatchOutcome> {
     (p) => p.status === "pending" && new Date(p.scheduledFor).getTime() <= now,
   );
   if (due.length === 0) return { ran: 0, posted: 0, failed: 0 };
+  console.log(`[scheduler] dispatching ${due.length} due post(s)`);
 
   const accounts = await listXConnectedAccounts();
   const accountIds = new Set(accounts.map((a) => a.id));
@@ -35,6 +37,8 @@ export async function runDueScheduledPosts(): Promise<DispatchOutcome> {
 
   const { postTweetBrowser } = await import("./browser/twitter-post");
   const fallback = await getDefaultAccountId();
+  const settings = await getGrokSettings();
+  const headless = settings.headlessPosting ?? false;
 
   let posted = 0;
   let failed = 0;
@@ -51,18 +55,21 @@ export async function runDueScheduledPosts(): Promise<DispatchOutcome> {
     }
     post.status = "posting";
     await upsertScheduledPost(post);
+    console.log(`[scheduler] posting id=${post.id} via account=${accountId}`);
     try {
-      const r = await postTweetBrowser(accountId, post.text);
+      const r = await postTweetBrowser(accountId, post.text, { headless });
       post.status = "posted";
       post.postedAt = new Date().toISOString();
       post.postedUrl = r.url;
       post.error = undefined;
       posted++;
+      console.log(`[scheduler] posted id=${post.id} → ${r.url}`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       post.status = "failed";
       post.error = msg;
       failed++;
+      console.error(`[scheduler] failed id=${post.id}: ${msg}`);
     }
     await upsertScheduledPost(post);
   }
