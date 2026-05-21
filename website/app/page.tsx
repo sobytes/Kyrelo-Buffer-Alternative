@@ -12,6 +12,7 @@ export default function Home() {
       <Why />
       <Features />
       <HowItWorks />
+      <Contribute />
       <CTA />
       <Footer />
     </main>
@@ -29,6 +30,7 @@ function Nav() {
         <nav className="hidden items-center gap-6 text-sm text-zinc-400 sm:flex">
           <a href="#features" className="hover:text-zinc-100">Features</a>
           <a href="#how" className="hover:text-zinc-100">How it works</a>
+          <a href="#contribute" className="hover:text-zinc-100">Contribute</a>
           <a href={GITHUB_URL} className="hover:text-zinc-100" target="_blank" rel="noreferrer">
             GitHub
           </a>
@@ -233,6 +235,66 @@ function HowItWorks() {
               <p className="mt-2 text-sm leading-relaxed text-zinc-400">{s.body}</p>
             </div>
           ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Contribute() {
+  return (
+    <section id="contribute" className="border-t border-line bg-ink py-20">
+      <div className="mx-auto max-w-5xl px-6">
+        <div className="mb-10 text-center">
+          <span className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
+            Open source · MIT
+          </span>
+          <h2 className="mt-3 text-3xl font-semibold tracking-tight text-zinc-100 sm:text-4xl">
+            How to contribute
+          </h2>
+          <p className="mx-auto mt-4 max-w-2xl text-base text-zinc-400">
+            Kyrelo is community-driven. Code lives on GitHub, releases are signed
+            and notarized, and issues are open. Watch the walkthrough below, then
+            jump straight to the repo.
+          </p>
+        </div>
+
+        <div className="glow-purple relative mx-auto aspect-video max-w-4xl overflow-hidden rounded-2xl border border-line bg-black shadow-2xl">
+          <iframe
+            src="https://www.youtube-nocookie.com/embed/wQarSJb0gYM?rel=0"
+            title="How to contribute to Kyrelo"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+            className="absolute inset-0 h-full w-full"
+            loading="lazy"
+          />
+        </div>
+
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+          <a
+            href={GITHUB_URL}
+            className="btn-primary"
+            target="_blank"
+            rel="noreferrer"
+          >
+            View source on GitHub
+          </a>
+          <a
+            href={`${GITHUB_URL}/issues`}
+            className="btn-ghost"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Open an issue
+          </a>
+          <a
+            href={`${GITHUB_URL}/pulls`}
+            className="btn-ghost"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Pull requests
+          </a>
         </div>
       </div>
     </section>
