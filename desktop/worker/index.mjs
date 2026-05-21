@@ -84,7 +84,9 @@ async function schedulerTick() {
 console.log(
   `Worker started. watch-grok every ${intervalMs / 1000}s, scheduler every ${schedulerIntervalMs / 1000}s.`,
 );
-await tick();
-await schedulerTick();
+// Fire the first ticks in parallel so a slow watch-grok scrape can't block
+// the scheduler from picking up due posts.
+void tick();
+void schedulerTick();
 setInterval(tick, intervalMs);
 setInterval(schedulerTick, schedulerIntervalMs);
