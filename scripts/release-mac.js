@@ -28,6 +28,13 @@ const path = require("node:path");
 
 require("dotenv").config({ path: path.join(__dirname, "../.env.local") });
 
+// If GIT_SSH_KEY is set in .env.local (path to a private key file), force
+// git push to use that key. Avoids the "denied to <other-account>" failure
+// when multiple keys are loaded in the agent.
+if (!process.env.GIT_SSH_COMMAND && process.env.GIT_SSH_KEY) {
+  process.env.GIT_SSH_COMMAND = `ssh -i "${process.env.GIT_SSH_KEY}" -o IdentitiesOnly=yes`;
+}
+
 const TEST_MODE = process.argv.slice(2).some((a) => a === "--test" || a === "test");
 
 const APPLE_ID = process.env.APPLE_ID;
