@@ -24,6 +24,26 @@ export async function runDueScheduledPosts(): Promise<DispatchOutcome> {
 
   const all = await listScheduledPosts();
   const now = Date.now();
+
+  // Recover posts orphaned at "posting" — the app closed (or crashed) mid-send,
+  // leaving the record stuck forever, since the dispatch loop below only picks
+  // up "pending". A real send finishes within a couple minutes of its
+  // scheduled time, so anything still "posting" well past that is stale. Mark
+  // it failed (not pending) — the original send may have gone through, so don't
+  // auto-retry; the user can reschedule from History.
+  const STALE_POSTING_MS = 10 * 60_000;
+  for (const p of all) {
+    if (
+      p.status === "posting" &&
+      now - new Date(p.scheduledFor).getTime() > STALE_POSTING_MS
+    ) {
+      p.status = "failed";
+      p.error =
+        "Posting was interrupted — the app closed mid-send. Reschedule if it didn't go out.";
+      await upsertScheduledPost(p);
+    }
+  }
+
   const due = all.filter(
     (p) => p.status === "pending" && new Date(p.scheduledFor).getTime() <= now,
   );

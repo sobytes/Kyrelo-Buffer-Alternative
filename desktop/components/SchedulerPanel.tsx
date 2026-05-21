@@ -454,6 +454,14 @@ function TimelineRow({
               </button>
             </div>
           )}
+          {post.status === "posting" && (
+            <button
+              onClick={onCancel}
+              className="text-[11px] text-zinc-500 hover:text-rose-400"
+            >
+              Cancel
+            </button>
+          )}
         </div>
         <div className="whitespace-pre-wrap break-words text-sm text-zinc-200">
           {post.text}
