@@ -47,7 +47,7 @@ function Hero() {
       <div className="mx-auto max-w-6xl px-6 text-center">
         <span className="mb-5 inline-flex items-center gap-2 rounded-full border border-line bg-panel px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-zinc-400">
           <span className="h-1.5 w-1.5 rounded-full bg-live" />
-          Open source · macOS · free
+          Open source · macOS &amp; Windows · free
         </span>
         <h1 className="mx-auto max-w-3xl text-balance text-5xl font-semibold tracking-tight text-zinc-50 sm:text-6xl">
           Schedule X posts from your <span className="text-accent">own computer</span>.
