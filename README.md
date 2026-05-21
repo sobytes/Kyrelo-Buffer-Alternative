@@ -3,7 +3,7 @@
 A local desktop app and marketing site for **Kyrelo** — the open-source, community-driven Buffer alternative for X.
 
 **Website:** [kyrelo.com](https://kyrelo.com/)
-**Download the app here:** [GitHub Releases](https://github.com/samueleastdev/Kyrelo-Buffer-Alternative-Desktop-App-VybeCoding-and-Contribute/releases/)
+**Download the app here:** [GitHub Releases](https://github.com/sobytes/-Kyrelo-Buffer-Alternative/releases/)
 
 ![Kyrelo desktop app](./website/public/screenshot.png)
 

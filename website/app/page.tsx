@@ -1,7 +1,7 @@
 import Image from "next/image";
 
 const GITHUB_URL =
-  "https://github.com/samueleastdev/Kyrelo-Buffer-Alternative-Desktop-App-VybeCoding-and-Contribute";
+  "https://github.com/sobytes/-Kyrelo-Buffer-Alternative";
 const RELEASES_URL = `${GITHUB_URL}/releases/latest`;
 
 export default function Home() {
