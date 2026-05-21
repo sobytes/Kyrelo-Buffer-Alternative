@@ -79,7 +79,7 @@
     "win": {
       "target": "nsis",
       "icon": "build/icon.png",
-      "publisherName": "Sobytes Ltd",
+      "publisherName": "SoBytes Ltd",
       "signingHashAlgorithms": [
         "sha256"
       ],
