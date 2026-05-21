@@ -100,12 +100,25 @@ async function acquireBrowserLock(platform: string): Promise<() => void> {
   return release;
 }
 
-// Stale SingletonLock files survive crashes (Ctrl+C, exceptions, OS-killed
-// processes). Without removing them, the next launch fails with "Failed to
-// create a ProcessSingleton". Safe to delete because the mutex above ensures
-// we never have two of OUR processes touching the dir at once.
+// Strip files that make Chrome refuse to start cleanly on a profile dir:
+//
+//  - Singleton{Lock,Cookie,Socket} — stale lock files left by crashed runs;
+//    without removing them the next launch fails to create a ProcessSingleton.
+//
+//  - "Last Version" — the Connect flow opens this profile with the user's real
+//    (auto-updating) Chrome, which stamps the dir with that version. Our
+//    bundled Chromium lags behind, and Chrome refuses to open a profile
+//    stamped by a NEWER build — it exits immediately with code 21. Dropping
+//    the stamp lets the older bundled build open the profile.
+//
+// Safe: the mutex above ensures only one of OUR processes touches the dir.
 async function clearStaleProfileLocks(dir: string) {
-  for (const name of ["SingletonLock", "SingletonCookie", "SingletonSocket"]) {
+  for (const name of [
+    "SingletonLock",
+    "SingletonCookie",
+    "SingletonSocket",
+    "Last Version",
+  ]) {
     await fs.rm(path.join(dir, name), { force: true }).catch(() => {});
   }
 }

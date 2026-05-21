@@ -57,7 +57,7 @@ function baseEnv(port) {
     APP_URL: `http://127.0.0.1:${port}`,
     STORAGE_DIR: storageDir,
     PLAYWRIGHT_BROWSERS_PATH: isDev
-      ? process.env.PLAYWRIGHT_BROWSERS_PATH ?? ""
+      ? process.env.PLAYWRIGHT_BROWSERS_PATH ?? path.join(ROOT, "build", "pw-browsers")
       : path.join(process.resourcesPath, "pw-browsers"),
     NODE_ENV: isDev ? "development" : "production",
   };
