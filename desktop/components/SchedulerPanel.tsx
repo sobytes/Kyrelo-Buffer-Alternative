@@ -341,10 +341,35 @@ function PostRow({
           open on X ↗
         </a>
       )}
-      {post.error && (
-        <div className="mt-2 rounded-md border border-rose-900/50 bg-rose-950/30 p-2 text-[11px] text-rose-300">
-          {post.error}
-        </div>
+      {post.error && <PostError error={post.error} />}
+    </div>
+  );
+}
+
+// Failed-post errors (especially Playwright launch dumps) can run to thousands
+// of characters. Show a short preview with a Read more / Show less toggle.
+function PostError({ error }: { error: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const LIMIT = 220;
+  const isLong = error.length > LIMIT;
+  const shown = expanded || !isLong ? error : error.slice(0, LIMIT).trimEnd() + "…";
+  return (
+    <div className="mt-2 rounded-md border border-rose-900/50 bg-rose-950/30 p-2 text-[11px] text-rose-300">
+      <div
+        className={
+          "whitespace-pre-wrap break-words" +
+          (expanded ? " max-h-48 overflow-y-auto" : "")
+        }
+      >
+        {shown}
+      </div>
+      {isLong && (
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-1 font-medium text-rose-200 underline-offset-2 hover:underline"
+        >
+          {expanded ? "Show less" : "Read more"}
+        </button>
       )}
     </div>
   );
