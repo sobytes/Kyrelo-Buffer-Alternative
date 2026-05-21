@@ -1,6 +1,8 @@
 // Cross-platform Playwright Chromium install. Installs into
 // build/pw-browsers/ (so electron-builder can ship it via extraResources)
-// and prunes the headless-shell + ffmpeg subdirs we never use.
+// and prunes the ffmpeg subdir we don't use. The headless-shell is KEPT —
+// the scraper runs headless, and Playwright drives that through its separate
+// chromium-headless-shell binary.
 //
 // Works the same on macOS, Windows, and Linux — no shell-specific syntax.
 
@@ -21,7 +23,7 @@ execSync("npx playwright install chromium", {
 try {
   const entries = await fs.readdir(target);
   for (const e of entries) {
-    if (e.startsWith("chromium_headless_shell-") || e.startsWith("ffmpeg-")) {
+    if (e.startsWith("ffmpeg-")) {
       await fs.rm(path.join(target, e), { recursive: true, force: true });
       console.log(`  removed ${e}`);
     }
