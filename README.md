@@ -1,8 +1,18 @@
 # X Detector
 
+![X Detector — watching 24 X handles with AI-generated @grok reply prompts](./images/screenshot.png)
+
 A local desktop app that watches a list of X handles for new posts, fires a macOS notification when one shows up, and lets you reply with an AI-written `@grok` question in one click.
 
 It's an Electron shell wrapping a Next.js dashboard. All scraping and posting happens through Playwright driving a real Chrome session that you log into once via the in-app **Connect with X** button.
+
+## Why I built this
+
+<img src="./images/buffer-status.png" alt="Buffer status page showing 17-hour ongoing outage and ~97% uptime" width="520" />
+
+I kept hitting Buffer's status page during the work day. Multi-hour outages across web, iOS, Android and API; ~97% uptime over the last quarter. When the scheduling and posting layer is someone else's cloud, it goes down at exactly the moments you need it to be up.
+
+This app runs entirely on your own machine. No backend, no SaaS account, no shared infrastructure. Your X session and AI keys live in a local data directory; the only network calls are to `x.com` and to the AI provider you've chosen. If it breaks, it breaks for you alone and you can fix it.
 
 ## Run it
 
