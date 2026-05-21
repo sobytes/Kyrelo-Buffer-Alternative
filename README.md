@@ -1,6 +1,6 @@
-# kyrelo
+# Kyrelo
 
-![kyrelo — watching 24 X handles with AI-generated @grok reply prompts](./images/screenshot.png)
+![Kyrelo — watching 24 X handles with AI-generated @grok reply prompts](./images/screenshot.png)
 
 A local desktop app that watches a list of X handles for new posts, fires a macOS notification when one shows up, lets you reply with an AI-written `@grok` question in one click, and schedules outgoing posts across multiple X accounts.
 

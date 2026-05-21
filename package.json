@@ -38,7 +38,7 @@
   },
   "build": {
     "appId": "com.sobytes.kyrelo",
-    "productName": "kyrelo",
+    "productName": "Kyrelo",
     "asar": false,
     "directories": {
       "buildResources": "build",

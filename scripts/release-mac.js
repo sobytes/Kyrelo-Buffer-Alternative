@@ -1,5 +1,5 @@
 /**
- * Local-only macOS release script for kyrelo.
+ * Local-only macOS release script for Kyrelo.
  *
  * What it does:
  *   1. Validates Apple notarization + gh CLI credentials.
@@ -139,7 +139,7 @@ function uploadRelease(version) {
 async function main() {
   const start = Date.now();
   console.log("========================================");
-  console.log(TEST_MODE ? "  kyrelo — TEST BUILD" : "  kyrelo — RELEASE");
+  console.log(TEST_MODE ? "  Kyrelo — TEST BUILD" : "  Kyrelo — RELEASE");
   console.log("========================================");
 
   if (!TEST_MODE) validate();
@@ -155,7 +155,7 @@ async function main() {
   console.log("========================================");
   console.log(`  Done in ${fmt(Date.now() - start)}`);
   if (TEST_MODE) {
-    console.log("  App: dist/mac-arm64/kyrelo.app");
+    console.log("  App: dist/mac-arm64/Kyrelo.app");
     console.log("  (Not notarized — Gatekeeper will warn.)");
   } else {
     console.log(`  Release: https://github.com/samueleastdev/Kyrelo-Buffer-Alternative-Desktop-App-VybeCoding-and-Contribute/releases/tag/v${version}`);
