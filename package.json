@@ -1,0 +1,68 @@
+{
+  "name": "x-detector",
+  "version": "0.1.0",
+  "private": true,
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build && node scripts/postbuild.mjs",
+    "typecheck": "tsc --noEmit",
+    "worker": "node worker/index.mjs",
+    "desktop": "electron .",
+    "pw:install": "PLAYWRIGHT_BROWSERS_PATH=$PWD/build/pw-browsers npx playwright install chromium",
+    "pack": "npm run build && npm run pw:install && electron-builder --dir",
+    "dist": "npm run build && npm run pw:install && electron-builder"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.40.0",
+    "next": "^15.1.0",
+    "playwright": "^1.49.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "autoprefixer": "^10.4.20",
+    "electron": "^42.1.0",
+    "electron-builder": "^25.1.8",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.2"
+  },
+  "build": {
+    "appId": "com.sobytes.xdetector",
+    "productName": "X Detector",
+    "asar": false,
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      ".next/**/*",
+      "worker/**/*",
+      "next.config.mjs",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "build/pw-browsers",
+        "to": "pw-browsers",
+        "filter": ["**/*"]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": "dmg",
+      "identity": null
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  }
+}

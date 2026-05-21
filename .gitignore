@@ -1,0 +1,51 @@
+# Dependencies
+node_modules/
+.pnp.*
+
+# Build output
+.next/
+out/
+dist/
+build/
+.turbo/
+.vercel/
+.output/
+.nuxt/
+
+# Secrets and env files
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+.env.staging
+*.pem
+*.key
+*.p12
+*.pfx
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Claude Code per-user config
+.claude/settings.local.json
+
+# Debug / logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Test coverage
+coverage/
+
+# Misc
+*.tsbuildinfo
+.data/
