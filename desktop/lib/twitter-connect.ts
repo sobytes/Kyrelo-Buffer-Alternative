@@ -1,7 +1,11 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { launchSystemChrome, SystemChromeHandle } from "./browser/system-chrome";
+import {
+  ChromeNotFoundError,
+  launchSystemChrome,
+  SystemChromeHandle,
+} from "./browser/system-chrome";
 import { listXAccounts, saveXAccounts } from "./storage";
 import { XAccount } from "./types";
 
@@ -37,6 +41,26 @@ function profileDir(accountId: string): string {
   return path.join(userdataRoot(), accountId);
 }
 
+// Windows keeps file handles on a Chrome profile dir open briefly after the
+// browser exits, so renaming the dir can fail with EPERM/EBUSY for a short
+// window. Retry with backoff to give the OS time to release the locks.
+async function renameWithRetry(from: string, to: string): Promise<void> {
+  const transient = new Set(["EPERM", "EBUSY", "EACCES", "ENOTEMPTY"]);
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 10; attempt++) {
+    try {
+      await fs.rename(from, to);
+      return;
+    } catch (err) {
+      lastErr = err;
+      const code = (err as NodeJS.ErrnoException).code ?? "";
+      if (!transient.has(code)) throw err;
+      await new Promise((r) => setTimeout(r, 200 + attempt * 200));
+    }
+  }
+  throw lastErr;
+}
+
 export function isConnectActive(): boolean {
   return getActive() !== null;
 }
@@ -46,7 +70,7 @@ export async function listXConnectedAccounts(): Promise<XAccount[]> {
 }
 
 export async function startTwitterConnect(): Promise<
-  { ok: true } | { error: string }
+  { ok: true } | { error: string; chromeMissing?: boolean }
 > {
   if (getActive()) {
     console.log("[twitter-connect] start: already connecting");
@@ -70,6 +94,9 @@ export async function startTwitterConnect(): Promise<
     const message = err instanceof Error ? err.message : String(err);
     console.error("[twitter-connect] start: launch failed:", message);
     await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+    if (err instanceof ChromeNotFoundError) {
+      return { error: message, chromeMissing: true };
+    }
     return { error: message };
   }
 
@@ -134,7 +161,18 @@ export async function endTwitterConnect(): Promise<
   const finalDir = profileDir(id);
   console.log(`[twitter-connect] end: renaming ${pendingId} → ${id} at ${finalDir}`);
   await fs.rm(finalDir, { recursive: true, force: true }).catch(() => {});
-  await fs.rename(profileDir(pendingId), finalDir);
+  try {
+    await renameWithRetry(profileDir(pendingId), finalDir);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[twitter-connect] end: profile rename failed:", message);
+    await fs.rm(profileDir(pendingId), { recursive: true, force: true }).catch(() => {});
+    return {
+      error:
+        "Signed in to X, but couldn't save the session — Chrome still had the " +
+        "profile files locked. Close any open Chrome windows, then click Connect again.",
+    };
+  }
 
   const sidecarPath = path.join(finalDir, "kyrelo-cookies.json");
   try {

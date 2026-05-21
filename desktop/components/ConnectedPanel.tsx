@@ -4,6 +4,14 @@ import { XAccount } from "@/lib/types";
 
 type Phase = "idle" | "starting" | "connecting" | "saving";
 
+function openExternal(url: string) {
+  if (window.electronAPI?.openExternal) {
+    void window.electronAPI.openExternal(url);
+  } else {
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+}
+
 interface ConnectState {
   accounts: XAccount[];
   connecting: boolean;
@@ -33,7 +41,13 @@ export function ConnectedPanel() {
       body: JSON.stringify({ action: "start" }),
     }).then((r) => r.json());
     if (r.error) {
-      alert(r.error);
+      if (r.chromeMissing) {
+        if (confirm(`${r.error}\n\nOpen the Chrome download page now?`)) {
+          openExternal("https://www.google.com/chrome/");
+        }
+      } else {
+        alert(r.error);
+      }
       setPhase("idle");
     } else {
       setPhase("connecting");

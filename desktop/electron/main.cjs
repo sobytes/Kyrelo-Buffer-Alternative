@@ -9,6 +9,10 @@ const path = require("node:path");
 const fs = require("node:fs");
 
 const isDev = !app.isPackaged;
+// On Windows `npm` is a `.cmd` script, which Node refuses to spawn without a
+// shell (EINVAL since the CVE-2024-27980 fix). Run npm through a shell on
+// Windows; the macOS/Linux path is unchanged.
+const NPM_VIA_SHELL = process.platform === "win32";
 // In dev we run from the repo. In packaged builds files live in
 // Contents/Resources/app/ (asar disabled), siblings to extraResources.
 const ROOT = isDev
@@ -66,6 +70,7 @@ function spawnNext(port) {
       cwd: ROOT,
       env: baseEnv(port),
       stdio: ["ignore", "pipe", "pipe"],
+      shell: NPM_VIA_SHELL,
     });
   } else {
     const nextBin = path.join(ROOT, "node_modules", "next", "dist", "bin", "next");
@@ -90,6 +95,7 @@ function spawnWorker(port) {
       cwd: ROOT,
       env: baseEnv(port),
       stdio: ["ignore", "pipe", "pipe"],
+      shell: NPM_VIA_SHELL,
     });
   } else {
     const workerJs = path.join(ROOT, "worker", "index.mjs");

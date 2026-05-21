@@ -8,6 +8,25 @@ function assertLoggedIn(page: Page) {
   }
 }
 
+// X's @mention / #hashtag typeahead floats over the composer's action bar and
+// can intercept the submit click. Escape clears it — but the /compose/post
+// composer is a modal, and an Escape with no typeahead open closes the whole
+// modal (popping X's "Save post?" draft dialog). So only send Escape when the
+// dropdown is genuinely visible.
+async function dismissTypeahead(page: Page): Promise<void> {
+  try {
+    const dropdown = page
+      .locator('[data-testid="typeaheadResult"], [data-testid="TypeaheadUser"]')
+      .first();
+    if (await dropdown.isVisible()) {
+      await page.keyboard.press("Escape");
+      console.log("[twitter-post] dismissed @/# typeahead popup");
+    }
+  } catch {
+    // no typeahead present — skip Escape so the compose modal stays open
+  }
+}
+
 export interface PostResult {
   url?: string;
 }
@@ -117,8 +136,9 @@ export async function postTweetBrowser(
 
     // X auto-suggests as you type (#hashtags, @mentions). The suggestion popup
     // floats over the action bar and steals clicks + intercepts Enter/Cmd+Enter,
-    // so dismiss it before submitting.
-    await page.keyboard.press("Escape");
+    // so dismiss it before submitting — but only if it's actually open (a stray
+    // Escape would close the compose modal instead).
+    await dismissTypeahead(page);
     await jitter(200, 500);
     console.log("[twitter-post] text typed, submitting");
 

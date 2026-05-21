@@ -83,7 +83,13 @@ function useConnect(): ConnectState {
       body: JSON.stringify({ action: "start" }),
     }).then((r) => r.json());
     if (r.error) {
-      alert(r.error);
+      if (r.chromeMissing) {
+        if (confirm(`${r.error}\n\nOpen the Chrome download page now?`)) {
+          openExternal("https://www.google.com/chrome/");
+        }
+      } else {
+        alert(r.error);
+      }
       setPhase("idle");
     } else {
       setPhase("connecting");

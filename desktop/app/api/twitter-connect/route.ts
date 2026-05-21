@@ -24,20 +24,28 @@ export async function POST(req: NextRequest) {
     action?: string;
     accountId?: string;
   };
-  if (body.action === "start") {
-    return NextResponse.json(await startTwitterConnect());
-  }
-  if (body.action === "done") {
-    return NextResponse.json(await endTwitterConnect());
-  }
-  if (body.action === "cancel") {
-    return NextResponse.json(await cancelTwitterConnect());
-  }
-  if (body.action === "disconnect") {
-    if (!body.accountId) {
-      return NextResponse.json({ error: "accountId required" }, { status: 400 });
+  try {
+    if (body.action === "start") {
+      return NextResponse.json(await startTwitterConnect());
     }
-    return NextResponse.json(await disconnectXAccount(body.accountId));
+    if (body.action === "done") {
+      return NextResponse.json(await endTwitterConnect());
+    }
+    if (body.action === "cancel") {
+      return NextResponse.json(await cancelTwitterConnect());
+    }
+    if (body.action === "disconnect") {
+      if (!body.accountId) {
+        return NextResponse.json({ error: "accountId required" }, { status: 400 });
+      }
+      return NextResponse.json(await disconnectXAccount(body.accountId));
+    }
+    return NextResponse.json({ error: "unknown action" }, { status: 400 });
+  } catch (err) {
+    // Always answer with JSON — an unhandled throw here would otherwise send an
+    // empty/HTML 500 that crashes the client's response.json() parse.
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[twitter-connect] route error:", message);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-  return NextResponse.json({ error: "unknown action" }, { status: 400 });
 }

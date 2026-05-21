@@ -9,19 +9,66 @@
 // for scraping/posting can reuse them.
 
 import { spawn, ChildProcess } from "node:child_process";
+import fs from "node:fs";
 import net from "node:net";
 import http from "node:http";
 import { chromium, Browser, BrowserContext, Page } from "playwright";
 
-function findChromeBinary(): string {
+// Locations Google Chrome installs to, per-OS. We probe the filesystem rather
+// than assume one path — on Windows especially, Chrome is just as often a
+// per-user install under %LOCALAPPDATA% as a machine-wide one.
+function chromeCandidates(): string[] {
   if (process.platform === "darwin") {
-    return "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+    const home = process.env.HOME ?? "";
+    return [
+      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      home && `${home}/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`,
+    ].filter(Boolean) as string[];
   }
   if (process.platform === "win32") {
-    const pf = process.env["ProgramFiles"] ?? "C:\\Program Files";
-    return `${pf}\\Google\\Chrome\\Application\\chrome.exe`;
+    const dirs = [
+      process.env["LOCALAPPDATA"],
+      process.env["ProgramFiles"],
+      process.env["ProgramFiles(x86)"],
+      "C:\\Program Files",
+      "C:\\Program Files (x86)",
+    ].filter(Boolean) as string[];
+    return dirs.map((d) => `${d}\\Google\\Chrome\\Application\\chrome.exe`);
   }
-  return "google-chrome";
+  return [
+    "/opt/google/chrome/chrome",
+    "/usr/bin/google-chrome",
+    "/usr/bin/google-chrome-stable",
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
+    "/snap/bin/chromium",
+  ];
+}
+
+// Path to an installed Chrome, or null if none can be found.
+export function findChrome(): string | null {
+  for (const p of chromeCandidates()) {
+    try {
+      if (fs.existsSync(p)) return p;
+    } catch {
+      // unreadable path — skip
+    }
+  }
+  return null;
+}
+
+// Thrown by launchSystemChrome when no Chrome install can be located. Callers
+// surface this to the user as an "install Chrome" prompt rather than a generic
+// failure.
+export class ChromeNotFoundError extends Error {
+  constructor() {
+    super(
+      "Google Chrome isn't installed. Kyrelo signs in to X through your real " +
+        "Chrome because Google blocks automated browsers. Install Chrome, then " +
+        "try Connect again.",
+    );
+    this.name = "ChromeNotFoundError";
+  }
 }
 
 function findFreePort(): Promise<number> {
@@ -58,6 +105,26 @@ function waitForCdp(port: number, timeoutMs: number): Promise<void> {
   });
 }
 
+// Killing the Chrome process directly (SIGTERM → TerminateProcess) on Windows
+// orphans its child processes — GPU, network service, crashpad — which keep
+// file handles open on the profile dir and block the post-login rename.
+// taskkill /T tears down the whole tree.
+function killChromeTree(proc: ChildProcess): void {
+  if (process.platform === "win32" && proc.pid) {
+    try {
+      spawn("taskkill", ["/pid", String(proc.pid), "/T", "/F"], { stdio: "ignore" });
+      return;
+    } catch {
+      // fall through to a plain signal kill
+    }
+  }
+  try {
+    proc.kill("SIGTERM");
+  } catch {
+    // already gone
+  }
+}
+
 export interface SystemChromeHandle {
   browser: Browser;
   context: BrowserContext;
@@ -70,9 +137,10 @@ export async function launchSystemChrome(
   userDataDir: string,
   startUrl: string,
 ): Promise<SystemChromeHandle> {
+  const chromePath = findChrome();
+  if (!chromePath) throw new ChromeNotFoundError();
   const port = await findFreePort();
-  const chromePath = findChromeBinary();
-  console.log(`[system-chrome] spawning Chrome → port=${port} dir=${userDataDir}`);
+  console.log(`[system-chrome] spawning Chrome (${chromePath}) → port=${port} dir=${userDataDir}`);
 
   const proc = spawn(
     chromePath,
@@ -127,7 +195,7 @@ export async function launchSystemChrome(
       }
 
       if (proc.exitCode === null) {
-        console.log("[system-chrome] sending SIGTERM, waiting for exit (up to 6s)");
+        console.log("[system-chrome] killing Chrome process tree, waiting for exit (up to 6s)");
         const start = Date.now();
         await new Promise<void>((resolve) => {
           let done = false;
@@ -138,11 +206,7 @@ export async function launchSystemChrome(
             resolve();
           };
           proc.once("exit", finish);
-          try {
-            proc.kill("SIGTERM");
-          } catch {
-            return finish();
-          }
+          killChromeTree(proc);
           setTimeout(() => {
             if (done) return;
             console.warn("[system-chrome] chrome didn't exit in 6s, SIGKILL");
