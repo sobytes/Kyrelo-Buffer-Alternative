@@ -16,7 +16,10 @@
  * Credentials (in .env.local — gitignored, NEVER commit):
  *   APPLE_ID=you@example.com
  *   APPLE_APP_SPECIFIC_PASSWORD=xxxx-xxxx-xxxx-xxxx
- *   APPLE_TEAM_ID=FT97GD7996
+ *   APPLE_TEAM_ID=YOUR10CHARS         (your Apple Developer Team ID)
+ *   MAC_SIGNING_IDENTITY=...optional  (pin a specific keychain identity;
+ *                                     auto-detects a Developer ID
+ *                                     Application cert otherwise)
  *
  * gh CLI must be authenticated as a user with push access to the repo.
  * Check with: gh auth status
@@ -56,13 +59,20 @@ function fmt(ms) {
   return m > 0 ? `${m}m ${s % 60}s` : `${s}s`;
 }
 
+function maskEmail(s) {
+  // Show only the domain so log paste-bins don't leak the mailbox.
+  const at = s.indexOf("@");
+  if (at < 0) return "[set]";
+  return `***@${s.slice(at + 1)}`;
+}
+
 function validate() {
   console.log("\nValidating credentials…");
   if (!APPLE_ID) fail("APPLE_ID missing in .env.local");
   if (!APPLE_APP_SPECIFIC_PASSWORD) fail("APPLE_APP_SPECIFIC_PASSWORD missing in .env.local");
   if (!APPLE_TEAM_ID) fail("APPLE_TEAM_ID missing in .env.local");
-  console.log(`  APPLE_ID: ${APPLE_ID}`);
-  console.log(`  APPLE_TEAM_ID: ${APPLE_TEAM_ID}`);
+  console.log(`  APPLE_ID: ${maskEmail(APPLE_ID)}`);
+  console.log(`  APPLE_TEAM_ID: [set]`);
   console.log(`  APPLE_APP_SPECIFIC_PASSWORD: [set]`);
 
   try {
@@ -72,21 +82,30 @@ function validate() {
   }
   console.log("  gh CLI: authenticated");
 
-  // Confirm signing identity is installed locally.
+  // Confirm at least one Developer ID Application cert is in the keychain.
+  // MAC_SIGNING_IDENTITY pins a specific one when multiple are present.
+  const pin = (process.env.MAC_SIGNING_IDENTITY ?? "").trim();
   try {
     const out = execSync('security find-identity -v -p codesigning', {
       encoding: "utf8",
     });
-    if (!out.includes("SOBYTES LTD (FT97GD7996)")) {
+    if (pin) {
+      if (!out.includes(pin)) {
+        fail(`Signing identity "${pin}" not found in keychain.`);
+      }
+      console.log("  signing identity: [pinned via MAC_SIGNING_IDENTITY]");
+    } else if (!/Developer ID Application/.test(out)) {
       fail(
-        'Signing identity "SOBYTES LTD (FT97GD7996)" not found in keychain. ' +
-        'Install the Developer ID Application cert from Apple Developer.',
+        "No Developer ID Application cert found in keychain. Install one from " +
+          "https://developer.apple.com/account/resources/certificates, or pin one " +
+          "with MAC_SIGNING_IDENTITY in .env.local.",
       );
+    } else {
+      console.log("  signing identity: Developer ID Application (auto-detected)");
     }
   } catch (err) {
     fail(`security find-identity failed: ${err.message}`);
   }
-  console.log("  signing identity: SOBYTES LTD (FT97GD7996)");
   console.log("");
 }
 
@@ -117,7 +136,11 @@ function build() {
       APPLE_APP_SPECIFIC_PASSWORD,
       APPLE_TEAM_ID,
     };
-    run("npx electron-builder --mac --arm64", { env });
+    // Optional: pin a specific keychain identity via env. Without it
+    // electron-builder picks the first Developer ID Application cert.
+    const pin = (process.env.MAC_SIGNING_IDENTITY ?? "").trim();
+    const identityFlag = pin ? ` -c.mac.identity=${JSON.stringify(pin)}` : "";
+    run(`npx electron-builder --mac --arm64${identityFlag}`, { env });
   }
 }
 

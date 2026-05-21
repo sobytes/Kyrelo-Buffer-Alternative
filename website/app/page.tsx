@@ -271,7 +271,7 @@ function Footer() {
       <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 text-xs text-zinc-500 sm:flex-row">
         <div className="flex items-center gap-2">
           <Image src="/icon.png" alt="" width={20} height={20} className="rounded" />
-          <span>Kyrelo · made by <a href="https://x.com/samueleastdev" className="underline hover:text-zinc-300" target="_blank" rel="noreferrer">@samueleastdev</a></span>
+          <span>Kyrelo · open source, MIT licensed</span>
         </div>
         <div className="flex items-center gap-5">
           <a href={GITHUB_URL} className="hover:text-zinc-300" target="_blank" rel="noreferrer">

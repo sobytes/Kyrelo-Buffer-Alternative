@@ -28,15 +28,16 @@ exports.default = async function notarizeApp(context) {
 
   const appName = context.packager.appInfo.productFilename;
   const appPath = `${appOutDir}/${appName}.app`;
+  // Pull the bundle ID from electron-builder rather than hardcoding it.
+  const appBundleId = context.packager.appInfo.id;
 
   console.log(`Notarizing ${appName}…`);
-  console.log(`   App path: ${appPath}`);
-  console.log(`   Apple ID: ${process.env.APPLE_ID}`);
-  console.log(`   Team ID:  ${process.env.APPLE_TEAM_ID}`);
+  console.log(`   App path:   ${appPath}`);
+  console.log(`   Bundle ID:  ${appBundleId}`);
 
   try {
     await notarize({
-      appBundleId: "com.sobytes.kyrelo",
+      appBundleId,
       appPath,
       appleId: process.env.APPLE_ID,
       appleIdPassword: process.env.APPLE_APP_SPECIFIC_PASSWORD,
