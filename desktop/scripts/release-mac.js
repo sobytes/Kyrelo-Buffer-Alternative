@@ -188,7 +188,7 @@ async function main() {
     console.log("  App: dist/mac-arm64/Kyrelo.app");
     console.log("  (Not notarized — Gatekeeper will warn.)");
   } else {
-    console.log(`  Release: https://github.com/sobytes/-Kyrelo-Buffer-Alternative/releases/tag/v${version}`);
+    console.log(`  Release: https://github.com/sobytes/Kyrelo-Buffer-Alternative/releases/tag/v${version}`);
   }
   console.log("========================================\n");
 }
