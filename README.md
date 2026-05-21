@@ -1,6 +1,6 @@
-# Kyrelo
+# Kyrelo — Community Driven Buffer Alternative
 
-A local desktop app and marketing site for **Kyrelo** — the open-source Buffer alternative for X.
+A local desktop app and marketing site for **Kyrelo** — the open-source, community-driven Buffer alternative for X.
 
 ![Kyrelo desktop app](./website/public/screenshot.png)
 
