@@ -13,6 +13,7 @@ import fs from "node:fs";
 import net from "node:net";
 import http from "node:http";
 import { chromium, Browser, BrowserContext, Page } from "playwright";
+import { clearStaleProfileLocks } from "./session";
 
 // Locations Google Chrome installs to, per-OS. We probe the filesystem rather
 // than assume one path — on Windows especially, Chrome is just as often a
@@ -139,6 +140,16 @@ export async function launchSystemChrome(
 ): Promise<SystemChromeHandle> {
   const chromePath = findChrome();
   if (!chromePath) throw new ChromeNotFoundError();
+
+  // Strip stale Singleton lock files left by a previous (potentially crashed)
+  // Chrome on the same profile dir. Without this, Chrome shows "Something
+  // went wrong when opening your profile" on launch and some features
+  // (cookies, prefs) fail to load properly. Safe — the connect mutex
+  // guarantees no other Chrome of ours is currently using this dir.
+  await clearStaleProfileLocks(userDataDir).catch((err) => {
+    console.warn("[system-chrome] lock cleanup failed (continuing):", err);
+  });
+
   const port = await findFreePort();
   console.log(`[system-chrome] spawning Chrome (${chromePath}) → port=${port} dir=${userDataDir}`);
 

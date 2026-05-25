@@ -1,5 +1,6 @@
 import { Page } from "playwright";
-import { humanType, jitter, openBrowser, warmup } from "./session";
+import { humanType, jitter, openBrowser, warmup } from "@/lib/browser/session";
+import { PostInput, PostResult } from "../types";
 
 function assertLoggedIn(page: Page) {
   const url = page.url();
@@ -27,10 +28,6 @@ async function dismissTypeahead(page: Page): Promise<void> {
   }
 }
 
-export interface PostResult {
-  url?: string;
-}
-
 const COMPOSER_SELECTORS = [
   'div[data-testid="tweetTextarea_0"]',
   'div[data-testid^="tweetTextarea"][role="textbox"]',
@@ -44,17 +41,9 @@ const SUBMIT_SELECTORS = [
   'button[data-testid="tweetButtonInline"]',
 ];
 
-export async function postTweetBrowser(
-  accountId: string,
-  text: string,
-  options: { headless?: boolean; imagePath?: string } = {},
-): Promise<PostResult> {
-  // Default visible so the user can watch the post happen live; flip via the
-  // Settings toggle for fully background operation.
-  const browser = await openBrowser("twitter", {
-    headless: options.headless ?? false,
-    accountId,
-  });
+export async function postToTwitter(input: PostInput): Promise<PostResult> {
+  const { accountId, text, imagePath, headless } = input;
+  const browser = await openBrowser("twitter", { headless, accountId });
   const { page } = browser;
 
   // X submits via /i/api/graphql/.../CreateTweet; the response includes the
@@ -112,13 +101,12 @@ export async function postTweetBrowser(
     await composer.click();
     await jitter(300, 800);
 
-    if (options.imagePath) {
-      console.log(`[twitter-post] attaching image: ${options.imagePath}`);
+    if (imagePath) {
+      console.log(`[twitter-post] attaching image: ${imagePath}`);
       const fileInput = page.locator('input[data-testid="fileInput"]').first();
       try {
         await fileInput.waitFor({ state: "attached", timeout: 5_000 });
-        await fileInput.setInputFiles(options.imagePath);
-        // Wait for the attached-image preview to render.
+        await fileInput.setInputFiles(imagePath);
         await page
           .locator('[data-testid="attachments"]')
           .first()
@@ -134,10 +122,6 @@ export async function postTweetBrowser(
     await humanType(page, text);
     await jitter(800, 1500);
 
-    // X auto-suggests as you type (#hashtags, @mentions). The suggestion popup
-    // floats over the action bar and steals clicks + intercepts Enter/Cmd+Enter,
-    // so dismiss it before submitting — but only if it's actually open (a stray
-    // Escape would close the compose modal instead).
     await dismissTypeahead(page);
     await jitter(200, 500);
     console.log("[twitter-post] text typed, submitting");
@@ -154,8 +138,6 @@ export async function postTweetBrowser(
 
     let clicked = false;
 
-    // Prefer the accessible Post button — Playwright matches the visible
-    // button by its rendered name, so the autocomplete popup can't steal it.
     const named = page.getByRole("button", { name: "Post", exact: true }).first();
     try {
       await named.waitFor({ state: "visible", timeout: 4_000 });

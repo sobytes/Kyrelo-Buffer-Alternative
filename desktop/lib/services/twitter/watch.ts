@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { Page } from "playwright";
-import { jitter, openBrowser, warmup } from "./session";
+import { jitter, openBrowser, warmup } from "@/lib/browser/session";
 
 async function dumpDebug(page: Page, label: string) {
   const dir = path.join(
@@ -62,7 +62,6 @@ async function scrapeOnPage(
     return [];
   }
 
-  // Two small scrolls to load a few more tweets (X lazy-renders).
   for (let i = 0; i < 2; i++) {
     await page.mouse.wheel(0, 600);
     await jitter(700, 1400);
@@ -84,11 +83,9 @@ async function scrapeOnPage(
         for (const art of Array.from(articles)) {
           if (out.length >= limit) break;
 
-          // Skip pinned tweets — they show "Pinned" via SVG label + text node.
           const social = art.querySelector('[data-testid="socialContext"]');
           if (social && /pinned/i.test(social.textContent ?? "")) continue;
 
-          // Status link (the timestamp anchor) — the same anchor wraps the <time> element.
           const anchors = art.querySelectorAll(
             `a[role="link"][href*="/status/"]`,
           ) as NodeListOf<HTMLAnchorElement>;
@@ -98,7 +95,6 @@ async function scrapeOnPage(
           for (const a of Array.from(anchors)) {
             const m = a.getAttribute("href")?.match(/^\/([^/]+)\/status\/(\d+)/);
             if (!m) continue;
-            // Only count tweets from the watched handle (skip quoted/retweeted others).
             if (m[1].toLowerCase() !== handleLower) continue;
             statusUrl = `https://x.com${a.getAttribute("href")}`;
             id = m[2];
@@ -115,7 +111,6 @@ async function scrapeOnPage(
           const text = (textEl?.textContent ?? "").trim();
           if (!text) continue;
 
-          // "Replying to @x" marker is rendered as a div before the tweet text.
           const replyingTo = Array.from(art.querySelectorAll("div")).some((d) =>
             /^Replying to /i.test(d.textContent ?? ""),
           );
@@ -144,7 +139,6 @@ export async function scrapeManyTimelines(
   const limit = opts.limit ?? 12;
   const handles = opts.handles.map((h) => h.replace(/^@/, "")).filter(Boolean);
 
-  // Scrapes run headless so the polling browser doesn't pop up every tick.
   const browser = await openBrowser("twitter", {
     headless: true,
     accountId: opts.accountId,
@@ -182,4 +176,3 @@ export async function scrapeManyTimelines(
     await browser.close();
   }
 }
-

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createScheduledPost } from "@/lib/scheduler";
 import { listScheduledPosts } from "@/lib/storage";
+import { getPlatform } from "@/lib/platforms";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as {
-    platform?: "twitter";
+    platform?: string;
     accountId?: string;
     text?: string;
     imagePath?: string;
@@ -29,15 +30,35 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
+  // Reject unknown platforms server-side — defends against typo'd UI bugs
+  // and ensures every stored post has a slug the dispatcher knows how to
+  // route. Honours the platform registry as the single source of truth.
+  const platform = getPlatform(body.platform);
+  if (!platform) {
+    return NextResponse.json(
+      { error: `unknown platform "${body.platform}"` },
+      { status: 400 },
+    );
+  }
   if (body.imagePath && !SAFE_IMAGE_PATH.test(body.imagePath)) {
     return NextResponse.json({ error: "invalid imagePath" }, { status: 400 });
+  }
+  // Instagram requires media; reject text-only posts up-front so they never
+  // reach the dispatcher and fail half-an-hour later.
+  if (platform.requiresMedia && !body.imagePath) {
+    return NextResponse.json(
+      {
+        error: `${platform.label} requires an image — attach one before scheduling.`,
+      },
+      { status: 400 },
+    );
   }
   const when = new Date(body.scheduledFor);
   if (Number.isNaN(when.getTime())) {
     return NextResponse.json({ error: "invalid scheduledFor date" }, { status: 400 });
   }
   const post = await createScheduledPost({
-    platform: body.platform,
+    platform: platform.slug,
     accountId: body.accountId,
     text: body.text.trim(),
     imagePath: body.imagePath || undefined,

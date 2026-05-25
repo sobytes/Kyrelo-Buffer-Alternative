@@ -103,7 +103,11 @@ async function acquireBrowserLock(platform: string): Promise<() => void> {
 // Strip files that make Chrome refuse to start cleanly on a profile dir:
 //
 //  - Singleton{Lock,Cookie,Socket} — stale lock files left by crashed runs;
-//    without removing them the next launch fails to create a ProcessSingleton.
+//    without removing them the next launch fails to create a ProcessSingleton
+//    and Chrome pops "Something went wrong when opening your profile".
+//
+//  - Default/LOCK and Default/*-journal — SQLite journal locks that the
+//    profile loader checks; corrupt ones trigger the same dialog.
 //
 //  - "Last Version" — the Connect flow opens this profile with the user's real
 //    (auto-updating) Chrome, which stamps the dir with that version. Our
@@ -111,15 +115,24 @@ async function acquireBrowserLock(platform: string): Promise<() => void> {
 //    stamped by a NEWER build — it exits immediately with code 21. Dropping
 //    the stamp lets the older bundled build open the profile.
 //
-// Safe: the mutex above ensures only one of OUR processes touches the dir.
-async function clearStaleProfileLocks(dir: string) {
-  for (const name of [
+// Safe: the mutex above (or the per-platform connect mutex) ensures only one
+// of OUR processes touches the dir.
+export async function clearStaleProfileLocks(dir: string) {
+  const topLevel = [
     "SingletonLock",
     "SingletonCookie",
     "SingletonSocket",
     "Last Version",
-  ]) {
+  ];
+  for (const name of topLevel) {
     await fs.rm(path.join(dir, name), { force: true }).catch(() => {});
+  }
+  // Same lock family inside Default/ — present once Chrome has initialised
+  // the profile at least once. Missing on first launch, which is fine.
+  const defaultDir = path.join(dir, "Default");
+  const defaultLocks = ["SingletonLock", "SingletonCookie", "SingletonSocket"];
+  for (const name of defaultLocks) {
+    await fs.rm(path.join(defaultDir, name), { force: true }).catch(() => {});
   }
 }
 
@@ -278,9 +291,13 @@ export async function humanType(
   const thinkRate = opts.thinkRate ?? 0.035;
   const speed = opts.speed ?? 1;
 
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    const prev = text[i - 1] ?? "";
+  // Iterate by code point, not UTF-16 code unit. Emojis like 🚀 are surrogate
+  // pairs (\uD83D\uDE80) — splitting them feeds Playwright invalid halves that
+  // X renders as ⬛ replacement characters.
+  const chars = Array.from(text);
+  for (let i = 0; i < chars.length; i++) {
+    const ch = chars[i];
+    const prev = chars[i - 1] ?? "";
 
     if (prev === "." || prev === "!" || prev === "?") {
       await jitter(320 * speed, 760 * speed);

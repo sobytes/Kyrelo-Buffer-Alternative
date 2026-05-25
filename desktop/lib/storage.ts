@@ -1,12 +1,29 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { ApiKeys, GrokSettings, GrokState, ScheduledPost, XAccount } from "./types";
+import {
+  ApiKeys,
+  ScheduledPost,
+  SocialAccount,
+  WatchedPost,
+  WatchSettings,
+  WatchState,
+} from "./types";
+import { PlatformSlug } from "./platforms";
 
-const GROK_SETTINGS_KEY = "grok-settings";
-const GROK_STATE_KEY = "grok-state";
+const WATCH_SETTINGS_KEY = "watch-settings";
+const LEGACY_WATCH_SETTINGS_KEY = "grok-settings";
+const LEGACY_WATCH_STATE_KEY = "grok-state";
 const API_KEYS_KEY = "api-keys";
 const SCHEDULED_POSTS_KEY = "scheduled-posts";
-const X_ACCOUNTS_KEY = "x-accounts";
+const LEGACY_X_ACCOUNTS_KEY = "x-accounts";
+
+function accountsKey(platform: PlatformSlug): string {
+  return `accounts-${platform}`;
+}
+
+function watchStateKey(platform: PlatformSlug): string {
+  return `watch-state-${platform}`;
+}
 
 const dataDir = process.env.STORAGE_DIR ?? path.join(process.cwd(), ".data");
 
@@ -25,9 +42,9 @@ async function write<T>(key: string, value: T): Promise<void> {
   await fs.writeFile(path.join(dataDir, `${key}.json`), JSON.stringify(value, null, 2));
 }
 
-const DEFAULT_GROK_SETTINGS: GrokSettings = {
+const DEFAULT_WATCH_SETTINGS: WatchSettings = {
   enabled: false,
-  handles: [],
+  handles: {},
   includeReplies: true,
   aiProvider: "claude",
   styleHint:
@@ -36,43 +53,105 @@ const DEFAULT_GROK_SETTINGS: GrokSettings = {
   headlessPosting: false,
 };
 
-export async function getGrokSettings(): Promise<GrokSettings> {
-  const stored = await read<Record<string, unknown>>(GROK_SETTINGS_KEY);
-  if (!stored) return DEFAULT_GROK_SETTINGS;
+export async function getWatchSettings(): Promise<WatchSettings> {
+  // Read the current file first; fall back to the legacy `grok-settings.json`
+  // and migrate it across if present. Settings are shared (the AI provider /
+  // style hint / headless flag are also used by the scheduler).
+  let stored = await read<Record<string, unknown>>(WATCH_SETTINGS_KEY);
+  if (!stored) {
+    const legacy = await read<Record<string, unknown>>(LEGACY_WATCH_SETTINGS_KEY);
+    if (legacy) {
+      stored = legacy;
+      await write(WATCH_SETTINGS_KEY, legacy);
+    }
+  }
+  if (!stored) return DEFAULT_WATCH_SETTINGS;
   const legacyHandle = typeof stored.handle === "string" ? stored.handle : null;
-  const handles = Array.isArray(stored.handles)
-    ? (stored.handles as string[])
-    : legacyHandle
-      ? [legacyHandle]
-      : DEFAULT_GROK_SETTINGS.handles;
+
+  // Handles can live on disk in three shapes:
+  //   1. The current per-platform object: { twitter: ["foo"], threads: [...] }
+  //   2. A flat array of X handles: ["foo", "bar"]            (Phase-1 shape)
+  //   3. A single legacy `handle: "..."` string field         (pre-Phase-1)
+  // Normalise all three into shape #1 on read.
+  let handles: Partial<Record<PlatformSlug, string[]>>;
+  if (
+    stored.handles &&
+    typeof stored.handles === "object" &&
+    !Array.isArray(stored.handles)
+  ) {
+    handles = stored.handles as Partial<Record<PlatformSlug, string[]>>;
+  } else if (Array.isArray(stored.handles)) {
+    handles = { twitter: stored.handles as string[] };
+  } else if (legacyHandle) {
+    handles = { twitter: [legacyHandle] };
+  } else {
+    handles = {};
+  }
   return {
-    ...DEFAULT_GROK_SETTINGS,
-    ...(stored as Partial<GrokSettings>),
+    ...DEFAULT_WATCH_SETTINGS,
+    ...(stored as Partial<WatchSettings>),
     handles,
   };
 }
 
-export async function saveGrokSettings(settings: GrokSettings): Promise<void> {
-  await write(GROK_SETTINGS_KEY, settings);
+export async function saveWatchSettings(settings: WatchSettings): Promise<void> {
+  await write(WATCH_SETTINGS_KEY, settings);
 }
 
-const DEFAULT_GROK_STATE: GrokState = { bootstrapped: false, tweets: [] };
+const DEFAULT_WATCH_STATE: WatchState = { bootstrapped: false, posts: [] };
 
-export async function getGrokState(): Promise<GrokState> {
-  const stored = await read<GrokState>(GROK_STATE_KEY);
-  if (!stored) return DEFAULT_GROK_STATE;
-  for (const t of stored.tweets) {
-    if (!t.handle) {
-      const m = t.url?.match(/^https?:\/\/[^/]+\/([^/]+)\/status\//);
-      if (m) t.handle = m[1].toLowerCase();
+export async function getWatchState(platform: PlatformSlug): Promise<WatchState> {
+  let stored = await read<WatchState | LegacyGrokState>(watchStateKey(platform));
+
+  // One-shot migration: legacy `grok-state.json` was X-only and stored its
+  // entries under `tweets`. Move to `watch-state-twitter.json` and rename
+  // the field on first read.
+  if (!stored && platform === "twitter") {
+    const legacy = await read<LegacyGrokState>(LEGACY_WATCH_STATE_KEY);
+    if (legacy) {
+      stored = legacy;
     }
   }
-  return stored;
+  if (!stored) return DEFAULT_WATCH_STATE;
+
+  const maybeLegacy = stored as LegacyGrokState & WatchState;
+  const posts: WatchedPost[] = Array.isArray(maybeLegacy.posts)
+    ? maybeLegacy.posts
+    : Array.isArray(maybeLegacy.tweets)
+      ? maybeLegacy.tweets
+      : [];
+  for (const p of posts) {
+    if (!p.handle) {
+      const m = p.url?.match(/^https?:\/\/[^/]+\/([^/]+)\/status\//);
+      if (m) p.handle = m[1].toLowerCase();
+    }
+  }
+  const normalized: WatchState = {
+    bootstrapped: !!maybeLegacy.bootstrapped,
+    lastCheckedAt: maybeLegacy.lastCheckedAt,
+    posts,
+  };
+  // If we just migrated from the legacy `tweets` shape, persist the new
+  // shape so future reads don't have to redo this work.
+  if ("tweets" in maybeLegacy && !("posts" in maybeLegacy)) {
+    await write(watchStateKey(platform), normalized).catch(() => {});
+  }
+  return normalized;
 }
 
-export async function saveGrokState(state: GrokState): Promise<void> {
-  const trimmed: GrokState = { ...state, tweets: state.tweets.slice(-200) };
-  await write(GROK_STATE_KEY, trimmed);
+export async function saveWatchState(
+  platform: PlatformSlug,
+  state: WatchState,
+): Promise<void> {
+  const trimmed: WatchState = { ...state, posts: state.posts.slice(-200) };
+  await write(watchStateKey(platform), trimmed);
+}
+
+// Shape on disk before the rename. Kept here, not exported.
+interface LegacyGrokState {
+  bootstrapped?: boolean;
+  lastCheckedAt?: string;
+  tweets?: WatchedPost[];
 }
 
 export async function getApiKeys(): Promise<ApiKeys> {
@@ -104,10 +183,35 @@ export async function deleteScheduledPost(id: string): Promise<void> {
   await saveScheduledPosts(all.filter((p) => p.id !== id));
 }
 
-export async function listXAccounts(): Promise<XAccount[]> {
-  return (await read<XAccount[]>(X_ACCOUNTS_KEY)) ?? [];
+// --- Per-platform account storage --------------------------------------------
+
+export async function listAccounts(platform: PlatformSlug): Promise<SocialAccount[]> {
+  const list = await read<SocialAccount[]>(accountsKey(platform));
+  if (list) return list;
+
+  // One-shot migration: the original X-only build stored accounts under
+  // `x-accounts.json` with no `platform` field. Migrate them into the
+  // platform-keyed store the first time we read twitter accounts.
+  if (platform === "twitter") {
+    const legacy = await read<Array<Omit<SocialAccount, "platform">>>(
+      LEGACY_X_ACCOUNTS_KEY,
+    );
+    if (legacy && legacy.length > 0) {
+      const migrated: SocialAccount[] = legacy.map((a) => ({
+        ...a,
+        platform: "twitter",
+      }));
+      await write(accountsKey(platform), migrated);
+      return migrated;
+    }
+  }
+  return [];
 }
 
-export async function saveXAccounts(accounts: XAccount[]): Promise<void> {
-  await write(X_ACCOUNTS_KEY, accounts);
+export async function saveAccounts(
+  platform: PlatformSlug,
+  accounts: SocialAccount[],
+): Promise<void> {
+  await write(accountsKey(platform), accounts);
 }
+

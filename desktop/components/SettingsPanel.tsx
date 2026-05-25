@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { GrokSettings } from "@/lib/types";
+import { WatchSettings } from "@/lib/types";
 
 interface KeyStatus {
   anthropic: boolean;
@@ -10,14 +10,14 @@ interface KeyStatus {
 }
 
 export function SettingsPanel() {
-  const [settings, setSettings] = useState<GrokSettings | null>(null);
+  const [settings, setSettings] = useState<WatchSettings | null>(null);
   const [status, setStatus] = useState<KeyStatus | null>(null);
   const [anthropicKey, setAnthropicKey] = useState("");
   const [openaiKey, setOpenaiKey] = useState("");
   const [savingKeys, setSavingKeys] = useState(false);
 
   async function loadSettings() {
-    const s = await fetch("/api/grok-settings").then((r) => r.json());
+    const s = await fetch("/api/watch/settings").then((r) => r.json());
     setSettings(s.settings);
   }
 
@@ -31,9 +31,9 @@ export function SettingsPanel() {
     loadKeys();
   }, []);
 
-  async function save(next: GrokSettings) {
+  async function save(next: WatchSettings) {
     setSettings(next);
-    await fetch("/api/grok-settings", {
+    await fetch("/api/watch/settings", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(next),
@@ -60,8 +60,22 @@ export function SettingsPanel() {
   }
 
   async function resetState() {
-    if (!confirm("Clear all seen tweets?")) return;
-    await fetch("/api/grok-state", { method: "DELETE" });
+    if (
+      !confirm(
+        "Clear all seen posts across every watched platform?\n\n" +
+          "This wipes the Monitor's memory so the next scrape starts fresh — useful if " +
+          "stale entries got stuck. Doesn't touch your scheduled posts.",
+      )
+    )
+      return;
+    // Nuke watch state for every platform that has a scraper. New ones added
+    // to PLATFORMS just appear here automatically.
+    const slugs = ["twitter", "threads", "linkedin"];
+    await Promise.all(
+      slugs.map((slug) =>
+        fetch(`/api/watch/${slug}/state`, { method: "DELETE" }).catch(() => {}),
+      ),
+    );
   }
 
   if (!settings) {
@@ -89,7 +103,7 @@ export function SettingsPanel() {
           className="rounded-md border border-line bg-ink px-2 py-1.5 text-sm"
           value={settings.aiProvider}
           onChange={(e) =>
-            save({ ...settings, aiProvider: e.target.value as GrokSettings["aiProvider"] })
+            save({ ...settings, aiProvider: e.target.value as WatchSettings["aiProvider"] })
           }
         >
           <option value="claude">Claude</option>
@@ -130,7 +144,7 @@ export function SettingsPanel() {
       </section>
 
       <section className="card space-y-3">
-        <div className="label">Reply tone</div>
+        <div className="label">@grok reply tone (X)</div>
         <textarea
           className="textarea h-28 resize-none"
           placeholder="e.g. sharp devil's advocate, dryly sarcastic, earnest insider…"
@@ -138,15 +152,19 @@ export function SettingsPanel() {
           onChange={(e) => save({ ...settings, styleHint: e.target.value })}
         />
         <p className="text-[10px] leading-relaxed text-zinc-500">
-          Fed to the AI when you click Generate reply. Be specific — &ldquo;contrarian on AI
-          hype&rdquo; works better than &ldquo;edgy&rdquo;.
+          Fed to the AI when you click Generate reply on a watched X post.
+          Be specific — &ldquo;contrarian on AI hype&rdquo; works better than
+          &ldquo;edgy&rdquo;.
         </p>
       </section>
 
       <section className="card space-y-3">
         <div className="label">Notifications & scraping</div>
         <label className="flex items-center justify-between gap-2 text-sm text-zinc-300">
-          Include replies
+          <span>
+            Include replies
+            <span className="ml-2 text-[10px] text-zinc-500">(X only)</span>
+          </span>
           <input
             type="checkbox"
             checked={settings.includeReplies}
@@ -186,10 +204,11 @@ export function SettingsPanel() {
       <section className="card space-y-2">
         <div className="label">Danger zone</div>
         <button onClick={resetState} className="btn-danger w-full text-xs">
-          Reset seen tweets
+          Reset seen posts (all platforms)
         </button>
         <p className="text-[10px] leading-relaxed text-zinc-500">
-          Wipes the seen-tweet history so the next scrape starts fresh.
+          Wipes the Monitor's seen-post memory across every watched platform.
+          The next scrape on each starts fresh.
         </p>
       </section>
     </div>

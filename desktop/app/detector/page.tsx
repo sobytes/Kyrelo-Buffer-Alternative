@@ -1,9 +1,6 @@
-import { DetectorPanel } from "@/components/DetectorPanel";
+import { redirect } from "next/navigation";
+import { DEFAULT_PLATFORM } from "@/lib/platforms";
 
-export default function DetectorPage() {
-  return (
-    <main className="mx-auto max-w-7xl px-6 pb-6 pt-10">
-      <DetectorPanel />
-    </main>
-  );
+export default function DetectorIndex() {
+  redirect(`/detector/${DEFAULT_PLATFORM}`);
 }

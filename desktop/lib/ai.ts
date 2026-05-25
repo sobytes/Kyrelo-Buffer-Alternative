@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getApiKeys } from "./storage";
 import { AiProvider } from "./types";
+import { PLATFORMS, PlatformSlug } from "./platforms";
 
 const MODEL = "claude-sonnet-4-6";
 const OPENAI_MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
@@ -129,9 +130,41 @@ Hard rules:
 - No em dashes. No emojis the original doesn't already use.
 - Output ONLY the rewritten post — no preamble, no quotes, no labels.`;
 
-function clampPostLength(text: string, max = 280): string {
+// Per-platform tone overlay appended to the base rewrite prompt. Each network
+// has a distinct voice; without these the rewrite reads "samey" across X /
+// Threads / LinkedIn even though the audiences are very different.
+const PLATFORM_STYLE: Record<PlatformSlug, string> = {
+  twitter:
+    "Platform: X (Twitter). Voice: punchy, conversational, internet-native. " +
+    "Short sentences, one sharp thought per line. Hashtags fine in moderation.",
+  threads:
+    "Platform: Threads. Voice: casual, riffy, lowercase-friendly. " +
+    "Lighter and more meandering than X. Skip hashtags. Personal asides welcome.",
+  linkedin:
+    "Platform: LinkedIn. Voice: thoughtful and professional. " +
+    "Lessons, insights, observations. Full sentences. No slang. " +
+    "At most one or two relevant hashtags at the end (or none).",
+  facebook:
+    "Platform: Facebook. Voice: friendly, conversational, slightly longer-form. " +
+    "Talking to friends and family — warm, not corporate. Light on hashtags.",
+  instagram:
+    "Platform: Instagram (caption). Voice: evocative, emoji-friendly, " +
+    "line breaks for rhythm. Hashtags at the end are fine (5–10 relevant ones).",
+};
+
+function buildRewriteSystem(platform?: PlatformSlug): string {
+  const style = platform ? PLATFORM_STYLE[platform] : null;
+  return style ? `${REWRITE_SYSTEM}\n\n${style}` : REWRITE_SYSTEM;
+}
+
+// X Premium / verified accounts can post up to 4000 characters. The rewrite
+// is allowed to keep that full headroom; the system prompt still asks the
+// model to stay within 80–120% of the original length.
+function clampPostLength(text: string, max = 4000): string {
   let out = text.trim().replace(/^["']|["']$/g, "").trim();
-  out = out.replace(/[ \t]+/g, " ");
+  // Collapse runs of spaces/tabs but preserve newlines so multi-paragraph
+  // posts (bullet lists, line breaks, etc.) survive the rewrite.
+  out = out.replace(/[ \t]+/g, " ").replace(/[ \t]*\n[ \t]*/g, "\n");
   if (out.length > max) out = out.slice(0, max - 1).trimEnd() + "…";
   return out;
 }
@@ -139,15 +172,24 @@ function clampPostLength(text: string, max = 280): string {
 export interface RewriteInput {
   text: string;
   provider: AiProvider;
+  // Optional — when provided, the model receives a platform-specific tone
+  // overlay so "Re-gig for LinkedIn" reads differently from "Re-gig for X".
+  platform?: PlatformSlug;
 }
 
-async function rewriteViaClaude(text: string): Promise<string> {
+async function rewriteViaClaude(text: string, platform?: PlatformSlug): Promise<string> {
   const apiKey = await resolveAnthropicKey();
   const anthropic = new Anthropic({ apiKey });
   const message = await anthropic.messages.create({
     model: MODEL,
-    max_tokens: 400,
-    system: [{ type: "text", text: REWRITE_SYSTEM, cache_control: { type: "ephemeral" } }],
+    max_tokens: 2000,
+    system: [
+      {
+        type: "text",
+        text: buildRewriteSystem(platform),
+        cache_control: { type: "ephemeral" },
+      },
+    ],
     messages: [
       {
         role: "user",
@@ -166,7 +208,7 @@ async function rewriteViaClaude(text: string): Promise<string> {
     .join("\n");
 }
 
-async function rewriteViaOpenAI(text: string): Promise<string> {
+async function rewriteViaOpenAI(text: string, platform?: PlatformSlug): Promise<string> {
   const apiKey = await resolveOpenAiKey();
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -177,9 +219,9 @@ async function rewriteViaOpenAI(text: string): Promise<string> {
     body: JSON.stringify({
       model: OPENAI_MODEL,
       temperature: 0.9,
-      max_tokens: 400,
+      max_tokens: 2000,
       messages: [
-        { role: "system", content: REWRITE_SYSTEM },
+        { role: "system", content: buildRewriteSystem(platform) },
         { role: "user", content: `Rewrite this post:\n"""\n${text}\n"""` },
       ],
     }),
@@ -197,7 +239,13 @@ async function rewriteViaOpenAI(text: string): Promise<string> {
 export async function rewritePost(input: RewriteInput): Promise<string> {
   const raw =
     input.provider === "openai"
-      ? await rewriteViaOpenAI(input.text)
-      : await rewriteViaClaude(input.text);
-  return clampPostLength(raw);
+      ? await rewriteViaOpenAI(input.text, input.platform)
+      : await rewriteViaClaude(input.text, input.platform);
+  // Clamp to the destination platform's hard limit so a Threads rewrite can't
+  // come back at 800 chars (over the 500 ceiling) and get rejected at post
+  // time. Falls back to the global 4000 when no platform is specified.
+  const meta = input.platform
+    ? PLATFORMS.find((p) => p.slug === input.platform)
+    : null;
+  return clampPostLength(raw, meta?.maxChars);
 }

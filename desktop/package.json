@@ -2,7 +2,7 @@
   "name": "kyrelo",
   "version": "0.1.10",
   "private": true,
-  "description": "Local desktop app that watches X handles, generates AI-written @grok replies, and schedules posts across multiple X accounts.",
+  "description": "Local desktop scheduler and monitor for X, Threads, LinkedIn, Facebook and Instagram. Cross-post in one shot, queue per-platform, watch handles for new posts, and generate platform-tuned AI rewrites.",
   "author": "SoBytes",
   "main": "electron/main.cjs",
   "scripts": {

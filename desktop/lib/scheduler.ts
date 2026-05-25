@@ -1,15 +1,11 @@
 import path from "node:path";
 import {
   deleteScheduledPost,
-  getGrokSettings,
+  getWatchSettings,
   listScheduledPosts,
   upsertScheduledPost,
 } from "./storage";
-import {
-  getDefaultAccountId,
-  isConnectActive,
-  listXConnectedAccounts,
-} from "./twitter-connect";
+import { getService, isAnyConnectActive } from "./services";
 import { ScheduledPost } from "./types";
 
 export interface DispatchOutcome {
@@ -20,7 +16,9 @@ export interface DispatchOutcome {
 }
 
 export async function runDueScheduledPosts(): Promise<DispatchOutcome> {
-  if (isConnectActive()) return { ran: 0, posted: 0, failed: 0, skipped: "connecting" };
+  if (isAnyConnectActive()) {
+    return { ran: 0, posted: 0, failed: 0, skipped: "connecting" };
+  }
 
   const all = await listScheduledPosts();
   const now = Date.now();
@@ -50,37 +48,67 @@ export async function runDueScheduledPosts(): Promise<DispatchOutcome> {
   if (due.length === 0) return { ran: 0, posted: 0, failed: 0 };
   console.log(`[scheduler] dispatching ${due.length} due post(s)`);
 
-  const accounts = await listXConnectedAccounts();
-  const accountIds = new Set(accounts.map((a) => a.id));
-  if (accountIds.size === 0) {
-    return { ran: 0, posted: 0, failed: 0, skipped: "no-account" };
-  }
-
-  const { postTweetBrowser } = await import("./browser/twitter-post");
-  const fallback = await getDefaultAccountId();
-  const settings = await getGrokSettings();
+  const settings = await getWatchSettings();
   const headless = settings.headlessPosting ?? false;
+
+  // Cache per-platform account lookups so we don't re-read storage per post.
+  const accountCache = new Map<string, { ids: Set<string>; fallback: string | null }>();
 
   let posted = 0;
   let failed = 0;
   for (const post of due) {
-    const accountId = post.accountId && accountIds.has(post.accountId)
-      ? post.accountId
-      : fallback;
-    if (!accountId) {
+    const service = getService(post.platform);
+    if (!service) {
       post.status = "failed";
-      post.error = "No connected X account for this post.";
+      post.error = `Unknown platform "${post.platform}" — no service registered.`;
       await upsertScheduledPost(post);
       failed++;
       continue;
     }
+
+    let cached = accountCache.get(post.platform);
+    if (!cached) {
+      const list = await service.listAccounts();
+      cached = {
+        ids: new Set(list.map((a) => a.id)),
+        fallback: list[0]?.id ?? null,
+      };
+      accountCache.set(post.platform, cached);
+    }
+    if (cached.ids.size === 0) {
+      post.status = "failed";
+      post.error = `No connected ${post.platform} account for this post.`;
+      await upsertScheduledPost(post);
+      failed++;
+      continue;
+    }
+
+    const accountId =
+      post.accountId && cached.ids.has(post.accountId)
+        ? post.accountId
+        : cached.fallback;
+    if (!accountId) {
+      post.status = "failed";
+      post.error = `No connected ${post.platform} account for this post.`;
+      await upsertScheduledPost(post);
+      failed++;
+      continue;
+    }
+
     post.status = "posting";
     await upsertScheduledPost(post);
-    console.log(`[scheduler] posting id=${post.id} via account=${accountId}`);
+    console.log(`[scheduler] posting id=${post.id} platform=${post.platform} account=${accountId}`);
     try {
       const root = process.env.STORAGE_DIR ?? path.join(process.cwd(), ".data");
-      const imagePath = post.imagePath ? path.join(root, "uploads", post.imagePath) : undefined;
-      const r = await postTweetBrowser(accountId, post.text, { headless, imagePath });
+      const imagePath = post.imagePath
+        ? path.join(root, "uploads", post.imagePath)
+        : undefined;
+      const r = await service.post({
+        accountId,
+        text: post.text,
+        imagePath,
+        headless,
+      });
       post.status = "posted";
       post.postedAt = new Date().toISOString();
       post.postedUrl = r.url;

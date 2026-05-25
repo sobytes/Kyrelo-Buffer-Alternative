@@ -1,6 +1,13 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { GrokSettings, GrokState, SeenTweet } from "@/lib/types";
+import { WatchedPost, WatchSettings, WatchState } from "@/lib/types";
+
+// Local aliases — keeps the existing @grok reply UI readable (it talks about
+// "tweets" because the @grok reply flow is X-specific) without forcing a
+// rename through every sub-component.
+type SeenTweet = WatchedPost;
+type GrokSettings = WatchSettings;
+type GrokState = WatchState;
 
 declare global {
   interface Window {
@@ -63,7 +70,7 @@ function useConnect(): ConnectState {
   const [phase, setPhase] = useState<ConnectPhase>("idle");
 
   async function refresh() {
-    const r = await fetch("/api/twitter-connect").then((r) => r.json());
+    const r = await fetch("/api/connect/twitter").then((r) => r.json());
     setConnected(Array.isArray(r.accounts) && r.accounts.length > 0);
     setPhase((p) => (r.connecting && p === "idle" ? "connecting" : p));
   }
@@ -77,7 +84,7 @@ function useConnect(): ConnectState {
 
   async function start() {
     setPhase("starting");
-    const r = await fetch("/api/twitter-connect", {
+    const r = await fetch("/api/connect/twitter", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "start" }),
@@ -98,7 +105,7 @@ function useConnect(): ConnectState {
 
   async function done() {
     setPhase("saving");
-    const r = await fetch("/api/twitter-connect", {
+    const r = await fetch("/api/connect/twitter", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "done" }),
@@ -113,7 +120,7 @@ function useConnect(): ConnectState {
   }
 
   async function cancel() {
-    await fetch("/api/twitter-connect", {
+    await fetch("/api/connect/twitter", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "cancel" }),
@@ -139,14 +146,14 @@ export function DetectorPanel() {
 
   async function load() {
     const [s, st] = await Promise.all([
-      fetch("/api/grok-settings").then((r) => r.json()),
-      fetch("/api/grok-state").then((r) => r.json()),
+      fetch("/api/watch/settings").then((r) => r.json()),
+      fetch("/api/watch/twitter/state").then((r) => r.json()),
     ]);
     setSettings(s.settings);
     setState(st.state);
 
     if (s.settings?.notifyDesktop && typeof Notification !== "undefined") {
-      const ids: SeenTweet[] = st.state?.tweets ?? [];
+      const ids: SeenTweet[] = st.state?.posts ?? [];
       const prev = prevIdsRef.current;
       if (prev.size === 0 && ids.length > 0) {
         prevIdsRef.current = new Set(ids.map((t) => t.id));
@@ -182,61 +189,77 @@ export function DetectorPanel() {
 
   async function save(next: GrokSettings) {
     setSettings(next);
-    await fetch("/api/grok-settings", {
+    await fetch("/api/watch/settings", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(next),
     });
     // Settings change can wipe state — reload.
-    fetch("/api/grok-state")
+    fetch("/api/watch/twitter/state")
       .then((r) => r.json())
       .then((j) => setState(j.state));
   }
 
+  // DetectorPanel manages the X-specific handle list. Reads/writes always
+  // target `handles.twitter`; other platforms have their own (simpler)
+  // monitor panel.
+  function twitterHandles(s: GrokSettings): string[] {
+    return s.handles.twitter ?? [];
+  }
+  function withTwitterHandles(s: GrokSettings, list: string[]): GrokSettings {
+    return { ...s, handles: { ...s.handles, twitter: list } };
+  }
+
   function addHandle() {
     const h = handleInput.trim().replace(/^@/, "").toLowerCase();
-    if (!h || settings!.handles.includes(h)) {
+    const current = twitterHandles(settings!);
+    if (!h || current.includes(h)) {
       setHandleInput("");
       return;
     }
-    save({ ...settings!, handles: [...settings!.handles, h] });
+    save(withTwitterHandles(settings!, [...current, h]));
     setHandleInput("");
   }
 
   function removeHandle(h: string) {
-    save({ ...settings!, handles: settings!.handles.filter((x) => x !== h) });
+    save(withTwitterHandles(settings!, twitterHandles(settings!).filter((x) => x !== h)));
   }
 
   function removeAllHandles() {
-    if (!settings!.handles.length) return;
-    if (!confirm(`Remove all ${settings!.handles.length} watched handles?`)) return;
-    save({ ...settings!, handles: [] });
+    const list = twitterHandles(settings!);
+    if (!list.length) return;
+    if (!confirm(`Remove all ${list.length} watched handles?`)) return;
+    save(withTwitterHandles(settings!, []));
   }
 
   function addGroup(handles: string[]) {
-    const existing = new Set(settings!.handles.map((h) => h.toLowerCase()));
+    const current = twitterHandles(settings!);
+    const existing = new Set(current.map((h) => h.toLowerCase()));
     const additions = handles
       .map((h) => h.toLowerCase())
       .filter((h) => !existing.has(h));
     if (additions.length === 0) return;
-    save({ ...settings!, handles: [...settings!.handles, ...additions] });
+    save(withTwitterHandles(settings!, [...current, ...additions]));
   }
 
   function toggleSuggested(h: string) {
     const lower = h.toLowerCase();
-    const isOn = settings!.handles.some((x) => x.toLowerCase() === lower);
-    save({
-      ...settings!,
-      handles: isOn
-        ? settings!.handles.filter((x) => x.toLowerCase() !== lower)
-        : [...settings!.handles, lower],
-    });
+    const current = twitterHandles(settings!);
+    const isOn = current.some((x) => x.toLowerCase() === lower);
+    save(
+      withTwitterHandles(
+        settings!,
+        isOn
+          ? current.filter((x) => x.toLowerCase() !== lower)
+          : [...current, lower],
+      ),
+    );
   }
 
   async function refreshNow() {
     setRefreshing(true);
     try {
-      const res = await fetch("/api/grok-run", { method: "POST" });
+      const res = await fetch("/api/watch/twitter/run", { method: "POST" });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) alert(`Run failed: ${json.error ?? res.status}`);
       else if (json.skipped) console.log(`Skipped: ${json.skipped}`);
@@ -250,7 +273,7 @@ export function DetectorPanel() {
     setReplyingTweet(t);
   }
 
-  const tweets = [...state.tweets].sort((a, b) =>
+  const tweets = [...state.posts].sort((a, b) =>
     (b.postedAt ?? b.seenAt).localeCompare(a.postedAt ?? a.seenAt),
   );
 
@@ -326,7 +349,7 @@ function Hero({
   // Decide phase
   const needsConnect = !connect.connected && connect.phase === "idle";
   const inLogin = connect.phase === "starting" || connect.phase === "connecting" || connect.phase === "saving";
-  const needsHandles = settings.handles.length === 0;
+  const needsHandles = (settings.handles.twitter?.length ?? 0) === 0;
   const watching = settings.enabled && !needsConnect && !needsHandles && !inLogin;
 
   const lastCheckAgo = state.lastCheckedAt
@@ -356,7 +379,7 @@ function Hero({
                       : "Paused"}
             </div>
             <h1 className="mt-0.5 text-xl font-semibold tracking-tight text-zinc-100">
-              {watching && `Monitoring ${settings.handles.length} ${settings.handles.length === 1 ? "handle" : "handles"} on X`}
+              {watching && `Monitoring ${(settings.handles.twitter?.length ?? 0)} ${(settings.handles.twitter?.length ?? 0) === 1 ? "handle" : "handles"} on X`}
               {!watching && inLogin && connect.phase === "saving" && "Saving session…"}
               {!watching && inLogin && connect.phase === "starting" && "Opening Chrome…"}
               {!watching && inLogin && connect.phase === "connecting" &&
@@ -371,7 +394,7 @@ function Hero({
               {watching && (
                 <>
                   Last check {lastCheckAgo ?? "never"} •{" "}
-                  {state.tweets.filter((t) => !t.skipped).length} tweets tracked
+                  {state.posts.filter((t) => !t.skipped).length} tweets tracked
                 </>
               )}
               {!watching && inLogin && connect.phase === "connecting" &&
@@ -487,9 +510,9 @@ function HandlesCard({
         <div className="label !mb-0">Watching</div>
         <div className="flex items-center gap-2">
           <span className="text-[10px] text-zinc-500">
-            {settings.handles.length} handle{settings.handles.length !== 1 && "s"}
+            {(settings.handles.twitter?.length ?? 0)} handle{(settings.handles.twitter?.length ?? 0) !== 1 && "s"}
           </span>
-          {settings.handles.length > 0 && (
+          {(settings.handles.twitter?.length ?? 0) > 0 && (
             <button
               onClick={onRemoveAll}
               className="text-[10px] text-zinc-500 underline-offset-2 hover:text-rose-400 hover:underline"
@@ -501,10 +524,10 @@ function HandlesCard({
       </div>
 
       <div className="flex flex-wrap gap-1.5">
-        {settings.handles.length === 0 ? (
+        {(settings.handles.twitter?.length ?? 0) === 0 ? (
           <span className="text-xs text-zinc-500">None yet.</span>
         ) : (
-          settings.handles.map((h) => (
+          (settings.handles.twitter ?? []).map((h) => (
             <span key={h} className="chip-on">
               @{h}
               <button
@@ -548,7 +571,7 @@ function HandlesCard({
         <div className="space-y-3 pt-1 animate-fade-in">
           {SUGGESTED_HANDLES.map((group) => {
             const allOn = group.handles.every((h) =>
-              settings.handles.some((x) => x.toLowerCase() === h.toLowerCase()),
+              (settings.handles.twitter ?? []).some((x) => x.toLowerCase() === h.toLowerCase()),
             );
             return (
               <div key={group.group}>
@@ -567,7 +590,7 @@ function HandlesCard({
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {group.handles.map((h) => {
-                    const isOn = settings.handles.some(
+                    const isOn = (settings.handles.twitter ?? []).some(
                       (x) => x.toLowerCase() === h.toLowerCase(),
                     );
                     return (
@@ -611,7 +634,7 @@ function Feed({
     );
   }
 
-  if (settings.handles.length === 0) {
+  if ((settings.handles.twitter?.length ?? 0) === 0) {
     return (
       <div className="card flex h-48 items-center justify-center text-sm text-zinc-500">
         Add a handle to start watching.
@@ -735,7 +758,7 @@ function ReplyModal({
     setGenerating(true);
     setError(null);
     try {
-      const r = await fetch("/api/grok-reply", {
+      const r = await fetch("/api/watch/twitter/reply", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "generate", tweetId: tweet.id }),
@@ -765,7 +788,7 @@ function ReplyModal({
     } catch {
       // clipboard may be denied — user can still copy manually
     }
-    await fetch("/api/grok-reply", {
+    await fetch("/api/watch/twitter/reply", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "mark", tweetId: tweet.id, replyText }),

@@ -1,15 +1,19 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { GrokSettings, ScheduledPost, XAccount } from "@/lib/types";
+import { useCallback, useEffect, useState } from "react";
+import { ScheduledPost, SocialAccount, WatchSettings } from "@/lib/types";
+import { getPlatform, PlatformMeta } from "@/lib/platforms";
 
 interface ConnectStatus {
-  accounts: XAccount[];
+  accounts: SocialAccount[];
 }
 
-export function SchedulerPanel() {
+export function SchedulerPanel({ platform }: { platform: PlatformMeta }) {
+  const platformSlug = platform.slug;
+  const connectUrl = `/api/connect/${platformSlug}`;
+  const connectedPageUrl = `/connected/${platformSlug}`;
   const [posts, setPosts] = useState<ScheduledPost[]>([]);
-  const [accounts, setAccounts] = useState<XAccount[]>([]);
+  const [accounts, setAccounts] = useState<SocialAccount[]>([]);
   const [accountId, setAccountId] = useState<string>("");
   const [text, setText] = useState("");
   const [scheduledFor, setScheduledFor] = useState(defaultDateTime());
@@ -17,10 +21,15 @@ export function SchedulerPanel() {
   const [now, setNow] = useState(() => Date.now());
   const [reschedulingPost, setReschedulingPost] = useState<ScheduledPost | null>(null);
   const [editingPost, setEditingPost] = useState<ScheduledPost | null>(null);
-  const [aiProvider, setAiProvider] = useState<GrokSettings["aiProvider"]>("claude");
+  const [aiProvider, setAiProvider] = useState<WatchSettings["aiProvider"]>("claude");
   const [imagePath, setImagePath] = useState<string | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [bulkIntervalMin, setBulkIntervalMin] = useState(60);
+  const [bulkStartAt, setBulkStartAt] = useState(defaultDateTime());
+  const [bulkRunning, setBulkRunning] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
+  const [bulkError, setBulkError] = useState<string | null>(null);
 
   async function pickImage(file: File) {
     setUploadingImage(true);
@@ -61,17 +70,17 @@ export function SchedulerPanel() {
     setPosts(r.posts ?? []);
   }
 
-  async function loadConnect() {
-    const r = (await fetch("/api/twitter-connect").then((r) => r.json())) as ConnectStatus;
+  const loadConnect = useCallback(async () => {
+    const r = (await fetch(connectUrl).then((r) => r.json())) as ConnectStatus;
     setAccounts(r.accounts ?? []);
     setAccountId((curr) => {
       if (curr && r.accounts.some((a) => a.id === curr)) return curr;
       return r.accounts[0]?.id ?? "";
     });
-  }
+  }, [connectUrl]);
 
   async function loadAiProvider() {
-    const r = await fetch("/api/grok-settings").then((r) => r.json());
+    const r = await fetch("/api/watch/settings").then((r) => r.json());
     if (r.settings?.aiProvider) setAiProvider(r.settings.aiProvider);
   }
 
@@ -84,7 +93,7 @@ export function SchedulerPanel() {
       loadConnect();
     }, 5_000);
     return () => clearInterval(id);
-  }, []);
+  }, [loadConnect]);
 
   async function schedule(e: React.FormEvent) {
     e.preventDefault();
@@ -95,7 +104,7 @@ export function SchedulerPanel() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          platform: "twitter",
+          platform: platformSlug,
           accountId,
           text,
           imagePath: imagePath || undefined,
@@ -121,12 +130,92 @@ export function SchedulerPanel() {
     loadPosts();
   }
 
+  async function removeFromHistory(id: string) {
+    if (
+      !confirm(
+        `Delete this post from history?\n\nThis only removes it from the app — anything already posted on ${platform.label} stays on ${platform.label}.`,
+      )
+    )
+      return;
+    await fetch(`/api/scheduler/posts/${id}`, { method: "DELETE" });
+    loadPosts();
+  }
+
   function reschedule(post: ScheduledPost) {
     setReschedulingPost(post);
   }
 
+  async function regigAndRescheduleAll(historyPosts: ScheduledPost[]) {
+    if (!accountId || historyPosts.length === 0 || bulkRunning) return;
+    const startMs = new Date(bulkStartAt).getTime();
+    if (Number.isNaN(startMs)) {
+      setBulkError("Invalid start time");
+      return;
+    }
+    const intervalMs = Math.max(1, bulkIntervalMin) * 60_000;
+    // ±20% of the interval, capped at 10 minutes, so the queue looks organic
+    // instead of mechanically spaced. Cap keeps jitter < half-interval so post
+    // order is always preserved.
+    const jitterRangeMs = Math.min(intervalMs * 0.2, 10 * 60_000);
+    // Reschedule in original chronological order so the queue mirrors the
+    // historical flow — oldest first at startAt, newest last.
+    const queue = [...historyPosts].reverse();
+    if (
+      !confirm(
+        `Re-gig and reschedule ${queue.length} post${queue.length === 1 ? "" : "s"} at ${bulkIntervalMin}-minute intervals starting ${new Date(startMs).toLocaleString()}?`,
+      )
+    )
+      return;
+    setBulkRunning(true);
+    setBulkError(null);
+    setBulkProgress({ done: 0, total: queue.length });
+    try {
+      for (let i = 0; i < queue.length; i++) {
+        const post = queue[i];
+        let newText = post.text;
+        try {
+          const rw = await fetch("/api/scheduler/rewrite", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: post.text, platform: post.platform }),
+          }).then((r) => r.json());
+          if (rw.ok && rw.text) newText = rw.text;
+        } catch {
+          // fall back to original text if the rewrite call fails
+        }
+        const jitter = (Math.random() * 2 - 1) * jitterRangeMs;
+        // Snap to the nearest minute so the datetime in the UI doesn't show
+        // odd-second timestamps that themselves look scripted.
+        const rawMs = startMs + i * intervalMs + jitter;
+        const snappedMs = Math.max(startMs, Math.round(rawMs / 60_000) * 60_000);
+        const when = new Date(snappedMs).toISOString();
+        const r = await fetch("/api/scheduler/posts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            platform: platformSlug,
+            accountId: post.accountId ?? accountId,
+            text: newText,
+            imagePath: post.imagePath || undefined,
+            scheduledFor: when,
+          }),
+        }).then((r) => r.json());
+        if (r.error) {
+          setBulkError(r.error);
+          break;
+        }
+        setBulkProgress({ done: i + 1, total: queue.length });
+      }
+      await loadPosts();
+    } finally {
+      setBulkRunning(false);
+    }
+  }
+
+  // Only show posts that belong to the current platform AND the active
+  // account. A post created on the X panel must never bleed into Threads.
   const forAccount = accountId
-    ? posts.filter((p) => p.accountId === accountId)
+    ? posts.filter((p) => p.platform === platformSlug && p.accountId === accountId)
     : [];
   const sorted = [...forAccount].sort((a, b) =>
     a.scheduledFor.localeCompare(b.scheduledFor),
@@ -134,16 +223,20 @@ export function SchedulerPanel() {
   const upcoming = sorted.filter((p) => p.status === "pending" || p.status === "posting");
   const history = sorted.filter((p) => p.status === "posted" || p.status === "failed").reverse();
 
-  const overLimit = text.length > 4000;
+  const maxChars = platform.maxChars;
+  const overLimit = text.length > maxChars;
+  const needsMedia = !!platform.requiresMedia && !imagePath;
 
   if (accounts.length === 0) {
     return (
       <div className="card flex flex-col items-center justify-center gap-2 py-10 text-center">
-        <div className="text-sm text-zinc-300">No X accounts connected yet.</div>
+        <div className="text-sm text-zinc-300">
+          No {platform.label} accounts connected yet.
+        </div>
         <div className="text-xs text-zinc-500">
           Connect one to start scheduling posts.
         </div>
-        <Link href="/connected" className="btn-primary mt-2 text-sm">
+        <Link href={connectedPageUrl} className="btn-primary mt-2 text-sm">
           Connect an account
         </Link>
       </div>
@@ -152,7 +245,12 @@ export function SchedulerPanel() {
 
   return (
     <div className="space-y-5">
-      <AccountTabs accounts={accounts} accountId={accountId} setAccountId={setAccountId} />
+      <AccountTabs
+        accounts={accounts}
+        accountId={accountId}
+        setAccountId={setAccountId}
+        connectedPageUrl={connectedPageUrl}
+      />
 
       <section className="card space-y-3">
         <div className="label">Schedule a post</div>
@@ -167,7 +265,7 @@ export function SchedulerPanel() {
               onChange={(e) => setText(e.target.value)}
             />
             <div className={"mt-1 text-[10px] " + (overLimit ? "text-rose-400" : "text-zinc-500")}>
-              {text.length} / 4000
+              {text.length} / {maxChars}
             </div>
           </div>
 
@@ -218,9 +316,22 @@ export function SchedulerPanel() {
             />
           </div>
 
+          {needsMedia && (
+            <p className="text-[11px] text-amber-300/90">
+              {platform.label} requires an image — attach one to schedule this post.
+            </p>
+          )}
+
           <button
             type="submit"
-            disabled={submitting || !text.trim() || overLimit || !scheduledFor || !accountId}
+            disabled={
+              submitting ||
+              !text.trim() ||
+              overLimit ||
+              !scheduledFor ||
+              !accountId ||
+              needsMedia
+            }
             className="btn-primary text-sm"
           >
             {submitting ? "Scheduling…" : "Schedule post"}
@@ -245,6 +356,62 @@ export function SchedulerPanel() {
       {history.length > 0 && (
         <section className="space-y-2">
           <div className="label">History</div>
+
+          <div className="card-tight space-y-2">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-xs font-medium text-zinc-200">
+                  Re-gig &amp; reschedule all
+                </div>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-zinc-500">
+                  Reword every history post (same meaning &amp; feel) and queue
+                  them out at a fixed interval. Originals stay in History.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-end gap-2">
+              <div>
+                <div className="label">Start at</div>
+                <input
+                  type="datetime-local"
+                  className="input text-sm"
+                  value={bulkStartAt}
+                  onChange={(e) => setBulkStartAt(e.target.value)}
+                  min={nowDateTime()}
+                  disabled={bulkRunning}
+                />
+              </div>
+              <div>
+                <div className="label">Interval (min)</div>
+                <input
+                  type="number"
+                  min={1}
+                  max={1440}
+                  className="input text-sm w-24"
+                  value={bulkIntervalMin}
+                  onChange={(e) =>
+                    setBulkIntervalMin(Math.max(1, Number(e.target.value) || 60))
+                  }
+                  disabled={bulkRunning}
+                />
+              </div>
+              <button
+                onClick={() => regigAndRescheduleAll(history)}
+                disabled={bulkRunning || history.length === 0}
+                className="btn-primary text-xs"
+              >
+                {bulkRunning
+                  ? bulkProgress
+                    ? `Working… ${bulkProgress.done}/${bulkProgress.total}`
+                    : "Working…"
+                  : `Re-gig & reschedule ${history.length}`}
+              </button>
+            </div>
+            {bulkError && (
+              <div className="text-[11px] text-rose-400">{bulkError}</div>
+            )}
+          </div>
+
           {history.slice(0, 20).map((p) => (
             <PostRow
               key={p.id}
@@ -252,6 +419,7 @@ export function SchedulerPanel() {
               now={now}
               onCancel={() => cancel(p.id)}
               onReschedule={() => reschedule(p)}
+              onRemove={() => removeFromHistory(p.id)}
             />
           ))}
         </section>
@@ -290,11 +458,13 @@ function PostRow({
   now,
   onCancel,
   onReschedule,
+  onRemove,
 }: {
   post: ScheduledPost;
   now: number;
   onCancel: () => void;
   onReschedule: () => void;
+  onRemove?: () => void;
 }) {
   const dueMs = new Date(post.scheduledFor).getTime() - now;
   return (
@@ -321,6 +491,14 @@ function PostRow({
               className="text-[11px] text-zinc-500 hover:text-accent"
             >
               Reschedule
+            </button>
+          )}
+          {(post.status === "posted" || post.status === "failed") && onRemove && (
+            <button
+              onClick={onRemove}
+              className="text-[11px] text-zinc-500 hover:text-rose-400"
+            >
+              Delete
             </button>
           )}
           {post.status === "pending" && (
@@ -528,7 +706,7 @@ function EditPostModal({
   onSaved,
 }: {
   post: ScheduledPost;
-  accounts: XAccount[];
+  accounts: SocialAccount[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -543,7 +721,8 @@ function EditPostModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const overLimit = text.length > 4000;
+  const maxChars = getPlatform(post.platform)?.maxChars ?? 4000;
+  const overLimit = text.length > maxChars;
 
   async function pickImage(file: File) {
     setUploadingImage(true);
@@ -634,7 +813,7 @@ function EditPostModal({
         />
         <div className="mt-1 flex items-center justify-between text-[10px]">
           <span className={overLimit ? "text-rose-400" : "text-zinc-500"}>
-            {text.length} / 4000
+            {text.length} / {maxChars}
           </span>
           {error && <span className="text-rose-400">{error}</span>}
         </div>
@@ -720,10 +899,12 @@ function AccountTabs({
   accounts,
   accountId,
   setAccountId,
+  connectedPageUrl,
 }: {
-  accounts: XAccount[];
+  accounts: SocialAccount[];
   accountId: string;
   setAccountId: (id: string) => void;
+  connectedPageUrl: string;
 }) {
   return (
     <div className="flex items-center gap-0 border-b border-line">
@@ -755,7 +936,7 @@ function AccountTabs({
         );
       })}
       <Link
-        href="/connected"
+        href={connectedPageUrl}
         className="ml-auto px-3 py-2.5 text-xs text-zinc-500 hover:text-zinc-200"
       >
         + add account
@@ -772,8 +953,8 @@ function RescheduleModal({
   onScheduled,
 }: {
   post: ScheduledPost;
-  accounts: XAccount[];
-  aiProvider: GrokSettings["aiProvider"];
+  accounts: SocialAccount[];
+  aiProvider: WatchSettings["aiProvider"];
   onClose: () => void;
   onScheduled: () => void;
 }) {
@@ -788,7 +969,8 @@ function RescheduleModal({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const overLimit = text.length > 4000;
+  const maxChars = getPlatform(post.platform)?.maxChars ?? 4000;
+  const overLimit = text.length > maxChars;
   const providerName = aiProvider === "openai" ? "OpenAI" : "Claude";
 
   async function rewrite() {
@@ -798,7 +980,7 @@ function RescheduleModal({
       const r = await fetch("/api/scheduler/rewrite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, platform: post.platform }),
       }).then((r) => r.json());
       if (r.ok && r.text) {
         setText(r.text);
@@ -819,7 +1001,7 @@ function RescheduleModal({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          platform: "twitter",
+          platform: post.platform,
           accountId,
           text,
           scheduledFor: new Date(scheduledFor).toISOString(),
@@ -867,7 +1049,7 @@ function RescheduleModal({
         />
         <div className="mt-1 flex items-center justify-between text-[10px]">
           <span className={overLimit ? "text-rose-400" : "text-zinc-500"}>
-            {text.length} / 4000
+            {text.length} / {maxChars}
           </span>
           {error && <span className="text-rose-400">{error}</span>}
         </div>

@@ -36,8 +36,8 @@ Thumbs.db
 *.swp
 *.swo
 
-# Claude Code per-user config
-.claude/settings.local.json
+# Claude Code per-user state (settings, session locks, etc.) — local-only
+.claude/
 
 # Debug / logs
 npm-debug.log*

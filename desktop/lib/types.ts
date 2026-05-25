@@ -1,3 +1,5 @@
+import { PlatformSlug } from "./platforms";
+
 export type AiProvider = "claude" | "openai";
 
 export interface ApiKeys {
@@ -5,9 +7,12 @@ export interface ApiKeys {
   openai?: string;
 }
 
-export interface GrokSettings {
+export interface WatchSettings {
   enabled: boolean;
-  handles: string[];
+  // Per-platform list of handles to watch. The original X-only build stored
+  // these as a flat `handles: string[]`; on first read the storage layer
+  // migrates that into `handles.twitter` so existing watch lists survive.
+  handles: Partial<Record<PlatformSlug, string[]>>;
   includeReplies: boolean;
   aiProvider: AiProvider;
   styleHint: string;
@@ -16,36 +21,37 @@ export interface GrokSettings {
   headlessPosting?: boolean;
 }
 
-export interface SeenTweet {
+export interface WatchedPost {
   id: string;
-  /** Handle this tweet was scraped from. */
+  /** Handle this post was scraped from. */
   handle: string;
   text: string;
   url: string;
   isReply: boolean;
   seenAt: string;
-  /** ISO timestamp pulled from the tweet's <time datetime> element. */
+  /** ISO timestamp pulled from the post's <time datetime> element where available. */
   postedAt?: string;
+  // --- Reply lifecycle (currently X-only; @grok flow) -----------------------
   repliedAt?: string;
   replyText?: string;
   replyError?: string;
-  /** Marked when this tweet was already too old when we first saw it. */
+  /** Marked when this post was already too old when we first saw it. */
   skipped?: "too-old";
 }
 
-export interface GrokState {
+export interface WatchState {
   bootstrapped: boolean;
   lastCheckedAt?: string;
-  tweets: SeenTweet[];
+  posts: WatchedPost[];
 }
 
-export type ScheduledPlatform = "twitter";
+export type ScheduledPlatform = PlatformSlug;
 export type ScheduledStatus = "pending" | "posting" | "posted" | "failed";
 
 export interface ScheduledPost {
   id: string;
   platform: ScheduledPlatform;
-  /** Account ID this post is sent from (XAccount.id). Optional for legacy posts. */
+  /** Account ID this post is sent from (SocialAccount.id). Optional for legacy posts. */
   accountId?: string;
   text: string;
   /** Filename inside .data/uploads/ — set when the user attached an image. */
@@ -58,10 +64,11 @@ export interface ScheduledPost {
   error?: string;
 }
 
-export interface XAccount {
-  /** Lowercased handle. Also the name of the Chrome profile dir on disk. */
+export interface SocialAccount {
+  /** Lowercased handle. Also the name of the Chrome profile dir on disk. Unique per platform. */
   id: string;
-  /** Handle as captured from X, preserving case. */
+  /** Handle as captured from the platform, preserving case. */
   handle: string;
+  platform: PlatformSlug;
   addedAt: string;
 }
