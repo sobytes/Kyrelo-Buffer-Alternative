@@ -2,12 +2,13 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 const url = "https://kyrelo.com";
-const title = "Kyrelo — Local Buffer alternative for X";
+const title =
+  "Kyrelo — Local scheduler for X, Threads, LinkedIn, Facebook & Instagram";
 const description =
-  "Schedule X posts, watch handles, and reply with AI from your own computer. Open-source Buffer alternative for macOS and Windows.";
+  "Schedule and cross-post to X, Threads, LinkedIn, Facebook and Instagram from your own computer. Open-source desktop Buffer alternative for macOS and Windows.";
 const ogImage = "/screenshot.png";
 const ogImageAlt =
-  "Kyrelo desktop app — watching 24 X handles with AI reply prompts";
+  "Kyrelo desktop app — scheduling and cross-posting across X, Threads, LinkedIn, Facebook and Instagram from macOS";
 
 export const metadata: Metadata = {
   title: { default: title, template: "%s · Kyrelo" },
@@ -15,13 +16,19 @@ export const metadata: Metadata = {
   applicationName: "Kyrelo",
   keywords: [
     "Buffer alternative",
+    "social media scheduler",
+    "cross-posting tool",
     "X scheduler",
     "Twitter scheduler",
+    "Threads scheduler",
+    "LinkedIn scheduler",
+    "Facebook scheduler",
+    "Instagram scheduler",
     "open source social media tool",
     "local-first scheduler",
     "desktop social scheduler",
-    "Mac Twitter app",
-    "Windows Twitter app",
+    "Mac social media app",
+    "Windows social media app",
     "self-hosted Buffer",
     "kyrelo",
   ],

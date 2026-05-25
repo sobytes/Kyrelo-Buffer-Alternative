@@ -52,14 +52,16 @@ function Hero() {
           Open source · macOS · free
         </span>
         <h1 className="mx-auto max-w-3xl text-balance text-5xl font-semibold tracking-tight text-zinc-50 sm:text-6xl">
-          Schedule X posts from your <span className="text-accent">own computer</span>.
+          Five networks. One <span className="text-accent">desktop scheduler</span>.
           <br />
           No SaaS. No outages.
         </h1>
         <p className="mx-auto mt-6 max-w-2xl text-pretty text-lg leading-relaxed text-zinc-400">
-          Kyrelo is a local Buffer alternative for X. Schedule posts across multiple accounts,
-          watch handles for new tweets, and reply with AI-generated questions — all running on
-          your machine, with the only network calls going to X and your AI provider.
+          Kyrelo is a local Buffer alternative for X, Threads, LinkedIn, Facebook
+          and Instagram. Cross-post in one shot, queue per network, watch handles
+          for new posts, and rewrite with AI tuned to each platform — all running
+          on your machine, with the only network calls going to the networks
+          themselves and your AI provider.
         </p>
         <div id="download" className="mt-8 flex flex-wrap items-center justify-center gap-3">
           <a href={RELEASES_URL} className="btn-primary" target="_blank" rel="noreferrer">
@@ -82,7 +84,7 @@ function Hero() {
           <div className="glow-purple overflow-hidden rounded-2xl border border-line bg-panel">
             <Image
               src="/screenshot.png"
-              alt="Kyrelo desktop app — watching 24 X handles with AI reply prompts"
+              alt="Kyrelo desktop app — scheduling and cross-posting across X, Threads, LinkedIn, Facebook and Instagram from macOS"
               width={2400}
               height={1500}
               className="h-auto w-full"
@@ -112,11 +114,17 @@ function Why() {
             is someone else&apos;s cloud, it breaks at exactly the moments you need it up.
           </p>
           <p className="mt-4 text-base leading-relaxed text-zinc-400">
-            Kyrelo runs entirely on your machine. No backend, no SaaS account, no shared
-            infrastructure. Your X session and AI keys live in a local data directory; the only
-            network calls are to <code className="rounded bg-panel px-1 py-0.5 text-[13px] text-zinc-300">x.com</code> and
-            whichever AI provider you choose. If something breaks, it breaks for you alone — and
-            you can read the source to fix it.
+            Kyrelo runs entirely on your machine. No backend, no SaaS account, no
+            shared infrastructure. Each network gets its own isolated Chrome
+            profile; sessions and AI keys live in a local data directory; the
+            only network calls are to the networks you connect (
+            <code className="rounded bg-panel px-1 py-0.5 text-[13px] text-zinc-300">x.com</code>,{" "}
+            <code className="rounded bg-panel px-1 py-0.5 text-[13px] text-zinc-300">threads.com</code>,{" "}
+            <code className="rounded bg-panel px-1 py-0.5 text-[13px] text-zinc-300">linkedin.com</code>,{" "}
+            <code className="rounded bg-panel px-1 py-0.5 text-[13px] text-zinc-300">facebook.com</code>,{" "}
+            <code className="rounded bg-panel px-1 py-0.5 text-[13px] text-zinc-300">instagram.com</code>
+            ) and whichever AI provider you choose. If something breaks, it
+            breaks for you alone — and you can read the source to fix it.
           </p>
         </div>
         <div className="overflow-hidden rounded-xl border border-line bg-panel p-3 shadow-xl">
@@ -135,33 +143,33 @@ function Why() {
 
 const FEATURES = [
   {
-    title: "Schedule across multiple X accounts",
-    body: "Connect any number of X accounts. Each gets its own isolated Chrome profile. Pick which account each post goes from via tabs.",
+    title: "Five networks, one composer",
+    body: "X, Threads, LinkedIn, Facebook and Instagram — connect any combination, manage them all from the same desktop window. Each network keeps its own isolated Chrome profile.",
+    icon: "layers",
+  },
+  {
+    title: "Cross-post once, ship everywhere",
+    body: "Write one post, pick the networks to send it to, hit Schedule. Kyrelo queues a tailored post per platform with the right char-limit and an organic time offset so it doesn't look automated.",
+    icon: "share",
+  },
+  {
+    title: "Unified queue across platforms",
+    body: "See everything that's still going out, on every network, in one timeline. Filter by platform; cancel inline. Stop juggling tabs.",
     icon: "calendar",
   },
   {
-    title: "Watch handles, get notified",
-    body: "Add a list of @handles you care about. Kyrelo scrapes their timelines every 90 seconds and fires a native macOS notification on new tweets and replies.",
-    icon: "radar",
-  },
-  {
-    title: "AI-generated @grok replies",
-    body: "On any new tweet, hit Reply with @grok — Claude or OpenAI drafts a sharp question. You edit, copy, and post manually on X (or skip if it doesn't land right).",
+    title: "AI rewrites tuned per platform",
+    body: "Re-gig with Claude or OpenAI and the model knows where the post is going: punchy on X, professional on LinkedIn, caption-style on Instagram. Same meaning, native voice.",
     icon: "sparkles",
   },
   {
-    title: "Image attachments",
-    body: "Attach an image to any scheduled post. Kyrelo uploads it through X's normal compose flow at send time.",
-    icon: "image",
+    title: "Watch handles, get notified",
+    body: "Track @handles on X, Threads and LinkedIn. Kyrelo scrapes their timelines every 90 seconds and fires a native macOS notification on new posts and replies.",
+    icon: "radar",
   },
   {
-    title: "Visible posting",
-    body: "Scheduled posts open a Chrome window so you can watch them type and submit in real time — useful while testing. Flip the headless toggle once you trust it.",
-    icon: "eye",
-  },
-  {
-    title: "macOS and Windows, signed",
-    body: "Apple Developer ID signed and notarized for macOS (no Gatekeeper warning), and Sectigo-signed for Windows. Open source — read it, build it yourself.",
+    title: "Local, signed, open source",
+    body: "Apple Developer ID signed and notarized for macOS, Sectigo-signed for Windows. No backend, no analytics, no telemetry — read the source, build it yourself.",
     icon: "shield",
   },
 ];
@@ -175,7 +183,7 @@ function Features() {
             Features
           </span>
           <h2 className="mt-3 text-3xl font-semibold tracking-tight text-zinc-100 sm:text-4xl">
-            Everything Buffer does for X, on your machine.
+            Everything Buffer does, on your machine.
           </h2>
         </div>
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -203,13 +211,13 @@ const STEPS = [
   },
   {
     n: 2,
-    title: "Connect your X account",
-    body: "Kyrelo opens a real Chrome window pointed at x.com/login. Sign in once — including Google or Apple OAuth — and your session is saved locally.",
+    title: "Connect the networks you want",
+    body: "Kyrelo opens a real Chrome window pointed at each network's login. Sign in once per platform — X, Threads, LinkedIn, Facebook, Instagram — and each session is saved to its own isolated profile.",
   },
   {
     n: 3,
-    title: "Schedule, monitor, reply",
-    body: "Use the Scheduler timeline to queue posts at specific times. Add handles in the Monitor to get notified on new activity. Generate AI replies on demand.",
+    title: "Schedule, cross-post, monitor",
+    body: "Queue per-platform from the Scheduler, or compose once and fan out from All platforms. Watch handles in the Monitor for desktop notifications when they post.",
   },
 ];
 
@@ -309,7 +317,8 @@ function CTA() {
           Stop refreshing the status page.
         </h2>
         <p className="mx-auto mt-4 max-w-xl text-base text-zinc-400">
-          Kyrelo is free, open source, and lives on your laptop. Bring your own X account.
+          Kyrelo is free, open source, and lives on your laptop. Bring the
+          accounts you already use.
         </p>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
           <a href={RELEASES_URL} className="btn-primary" target="_blank" rel="noreferrer">
@@ -356,6 +365,23 @@ function Icon({ name }: { name: string }) {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className={common}>
           <rect x="3" y="4" width="18" height="18" rx="2" />
           <path d="M16 2v4M8 2v4M3 10h18" />
+        </svg>
+      );
+    case "layers":
+      return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className={common}>
+          <path d="M12 2 2 7l10 5 10-5-10-5z" />
+          <path d="M2 12l10 5 10-5" />
+          <path d="M2 17l10 5 10-5" />
+        </svg>
+      );
+    case "share":
+      return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className={common}>
+          <circle cx="18" cy="5" r="3" />
+          <circle cx="6" cy="12" r="3" />
+          <circle cx="18" cy="19" r="3" />
+          <path d="M8.6 10.5l6.8-4M8.6 13.5l6.8 4" />
         </svg>
       );
     case "radar":
