@@ -57,6 +57,15 @@ export async function POST(req: NextRequest) {
   if (Number.isNaN(when.getTime())) {
     return NextResponse.json({ error: "invalid scheduledFor date" }, { status: 400 });
   }
+  // Never accept a past time — the worker would fire it on the next tick, and
+  // a buggy bulk-reschedule could otherwise queue dozens of posts to send
+  // back-to-back. 30s grace covers clock skew between the UI and this process.
+  if (when.getTime() < Date.now() - 30_000) {
+    return NextResponse.json(
+      { error: "scheduledFor is in the past — pick a future time." },
+      { status: 400 },
+    );
+  }
   const post = await createScheduledPost({
     platform: platform.slug,
     accountId: body.accountId,

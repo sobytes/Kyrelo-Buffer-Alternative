@@ -36,6 +36,27 @@ export function QueuePanel() {
     loadPosts();
   }
 
+  async function cancelAll(scope: "all" | PlatformSlug) {
+    const count =
+      scope === "all"
+        ? (posts ?? []).filter((p) => p.status === "pending").length
+        : (posts ?? []).filter(
+            (p) => p.status === "pending" && p.platform === scope,
+          ).length;
+    if (count === 0) return;
+    const label =
+      scope === "all"
+        ? `Cancel all ${count} pending post${count === 1 ? "" : "s"}? This can't be undone.`
+        : `Cancel all ${count} pending ${getPlatform(scope)?.label ?? scope} post${count === 1 ? "" : "s"}? This can't be undone.`;
+    if (!confirm(label)) return;
+    await fetch("/api/scheduler/posts/cancel-all", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(scope === "all" ? {} : { platform: scope }),
+    });
+    loadPosts();
+  }
+
   if (!posts) {
     return <div className="card text-sm text-zinc-500">Loading…</div>;
   }
@@ -68,6 +89,13 @@ export function QueuePanel() {
     else groups.push({ label, items: [p] });
   }
 
+  const pendingInScope =
+    filter === "all"
+      ? upcoming.filter((p) => p.status === "pending").length
+      : upcoming.filter(
+          (p) => p.status === "pending" && p.platform === filter,
+        ).length;
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-1.5">
@@ -91,6 +119,15 @@ export function QueuePanel() {
             />
           );
         })}
+        {pendingInScope > 0 && (
+          <button
+            onClick={() => cancelAll(filter)}
+            className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-rose-900/60 bg-rose-950/30 px-2.5 py-1 text-[11px] text-rose-300 hover:border-rose-700 hover:text-rose-200"
+            title="Cancel every pending post in this view"
+          >
+            Cancel all pending ({pendingInScope})
+          </button>
+        )}
       </div>
 
       {filtered.length === 0 ? (
@@ -179,6 +216,7 @@ function QueueRow({
   });
   const dueMs = new Date(post.scheduledFor).getTime() - now;
   const isPosting = post.status === "posting";
+  const isAi = post.proposedBy === "ai-bot";
   return (
     <div className="relative">
       <div className="pointer-events-none absolute -left-[26px] top-3.5 flex h-3 w-3 items-center justify-center">
@@ -191,7 +229,14 @@ function QueueRow({
           }
         />
       </div>
-      <div className="card-tight">
+      <div
+        className={
+          "card-tight " +
+          (isAi
+            ? "border-accent/40 bg-accent/[0.04] shadow-[inset_3px_0_0_0_rgba(124,92,255,0.6)]"
+            : "")
+        }
+      >
         <div className="mb-1.5 flex items-center justify-between gap-2 text-xs">
           <div className="flex items-center gap-2">
             <span className="font-semibold tabular-nums text-zinc-100">{time}</span>
@@ -207,6 +252,7 @@ function QueueRow({
             {post.accountId && (
               <span className="text-[10px] text-zinc-500">@{post.accountId}</span>
             )}
+            {post.proposedBy === "ai-bot" && <AiProposedBadge />}
             <span className={isPosting ? "text-amber-300" : "text-accent"}>
               {isPosting
                 ? "Posting now…"
@@ -239,6 +285,17 @@ function QueueRow({
         )}
       </div>
     </div>
+  );
+}
+
+function AiProposedBadge() {
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full border border-accent/40 bg-accent/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-accent"
+      title="Proposed by the AI Bot — review before it sends."
+    >
+      AI proposed
+    </span>
   );
 }
 

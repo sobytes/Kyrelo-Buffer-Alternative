@@ -45,7 +45,16 @@ export async function PATCH(
   }
   if (typeof body.scheduledFor === "string") {
     const d = new Date(body.scheduledFor);
-    if (!Number.isNaN(d.getTime())) post.scheduledFor = d.toISOString();
+    if (Number.isNaN(d.getTime())) {
+      return NextResponse.json({ error: "invalid scheduledFor date" }, { status: 400 });
+    }
+    if (d.getTime() < Date.now() - 30_000) {
+      return NextResponse.json(
+        { error: "scheduledFor is in the past — pick a future time." },
+        { status: 400 },
+      );
+    }
+    post.scheduledFor = d.toISOString();
   }
   if ("imagePath" in body) {
     if (body.imagePath && !SAFE_IMAGE_PATH.test(body.imagePath)) {

@@ -62,6 +62,77 @@ export interface ScheduledPost {
   postedAt?: string;
   postedUrl?: string;
   error?: string;
+  /** Set when an AI agent proposed this post. Currently "ai-bot" for growth-coach drafts. */
+  proposedBy?: "ai-bot";
+}
+
+// --- AI Bot ------------------------------------------------------------------
+
+export type AiBotRunStatus = "running" | "completed" | "failed" | "cancelled";
+
+/**
+ * pending  — drafted by the agent; not yet on the scheduler queue.
+ * scheduled — user approved; a ScheduledPost was created and linked via scheduledPostId.
+ * discarded — user threw it away.
+ */
+export type AiBotDraftStatus = "pending" | "scheduled" | "discarded";
+
+export interface AiBotDraft {
+  id: string;
+  text: string;
+  /** ISO 8601 — when the draft would fire if scheduled as-is. The user can edit this when approving. */
+  scheduledFor: string;
+  /** Agent's one-line reason for this post. Not posted, just shown in the UI. */
+  rationale?: string;
+  status: AiBotDraftStatus;
+  /** Set once status === "scheduled" — points at the ScheduledPost.id created on approval. */
+  scheduledPostId?: string;
+  createdAt: string;
+}
+
+export interface AiBotEvent {
+  /** Monotonically increasing within a run; first event is 0. */
+  seq: number;
+  at: string;
+  /**
+   * thinking: short status line.
+   * tool_call: model invoked a tool.
+   * tool_result: result that came back.
+   * draft: a new proposal was recorded (NOT yet on the queue — user must approve).
+   * final: closing summary.
+   * error: terminal failure.
+   */
+  kind: "thinking" | "tool_call" | "tool_result" | "draft" | "final" | "error";
+  text?: string;
+  toolName?: string;
+  toolInput?: unknown;
+  toolResultPreview?: string;
+  /** Set when kind === "draft" — the AiBotDraft.id that was just added to the run. */
+  draftId?: string;
+}
+
+export interface AiBotRun {
+  id: string;
+  platform: ScheduledPlatform;
+  accountId: string;
+  startedAt: string;
+  finishedAt?: string;
+  status: AiBotRunStatus;
+  events: AiBotEvent[];
+  drafts: AiBotDraft[];
+  errorMessage?: string;
+  /** URLs scraped as knowledge context for this run. */
+  websiteUrls?: string[];
+}
+
+export interface AiBotAccountConfig {
+  /** URLs the agent scrapes for product/voice context before drafting. Hard cap of 5. */
+  websiteUrls?: string[];
+}
+
+export interface AiBotConfig {
+  /** Keyed by `${platform}:${accountId}` so configs are scoped per account. */
+  accounts: Record<string, AiBotAccountConfig>;
 }
 
 export interface SocialAccount {

@@ -124,6 +124,21 @@ const NAV: NavItem[] = [
     ),
   },
   {
+    href: "/ai-bot",
+    label: "AI Bot",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="4" y="7" width="16" height="12" rx="3" />
+        <path d="M12 7V3" />
+        <circle cx="12" cy="3" r="1" fill="currentColor" />
+        <circle cx="9" cy="13" r="1" fill="currentColor" />
+        <circle cx="15" cy="13" r="1" fill="currentColor" />
+        <path d="M9 17h6" />
+        <path d="M2 12h2M20 12h2" />
+      </svg>
+    ),
+  },
+  {
     href: "/connected",
     label: "Connected",
     platformChildren: true,

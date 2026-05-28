@@ -1,6 +1,9 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import {
+  AiBotAccountConfig,
+  AiBotConfig,
+  AiBotRun,
   ApiKeys,
   ScheduledPost,
   SocialAccount,
@@ -16,6 +19,12 @@ const LEGACY_WATCH_STATE_KEY = "grok-state";
 const API_KEYS_KEY = "api-keys";
 const SCHEDULED_POSTS_KEY = "scheduled-posts";
 const LEGACY_X_ACCOUNTS_KEY = "x-accounts";
+const AI_BOT_RUNS_KEY = "ai-bot-runs";
+const AI_BOT_CONFIG_KEY = "ai-bot-config";
+
+function aiBotConfigKey(platform: PlatformSlug, accountId: string): string {
+  return `${platform}:${accountId}`;
+}
 
 function accountsKey(platform: PlatformSlug): string {
   return `accounts-${platform}`;
@@ -213,5 +222,100 @@ export async function saveAccounts(
   accounts: SocialAccount[],
 ): Promise<void> {
   await write(accountsKey(platform), accounts);
+}
+
+// --- AI Bot runs -------------------------------------------------------------
+
+// Bounded history: keep the last 50 runs on disk. A growth-coach run can carry
+// a few KB of event log, so unbounded growth would balloon over time.
+const AI_BOT_RUNS_LIMIT = 50;
+
+export async function listAiBotRuns(): Promise<AiBotRun[]> {
+  const raw = (await read<unknown[]>(AI_BOT_RUNS_KEY)) ?? [];
+  // Two migrations applied on the way out:
+  //  1. drafts: [] — earlier runs persisted before the proposedPostIds→drafts flip
+  //  2. websiteUrl → websiteUrls — earlier runs stored a single URL string
+  return raw.map((r) => normalizeStoredRun(r));
+}
+
+function normalizeStoredRun(raw: unknown): AiBotRun {
+  const r = raw as Record<string, unknown>;
+  const out = { ...r } as Record<string, unknown>;
+  if (!Array.isArray(out.drafts)) out.drafts = [];
+  if (!Array.isArray(out.websiteUrls)) {
+    if (typeof out.websiteUrl === "string" && out.websiteUrl) {
+      out.websiteUrls = [out.websiteUrl];
+    }
+    delete out.websiteUrl;
+  }
+  return out as unknown as AiBotRun;
+}
+
+export async function getAiBotRun(id: string): Promise<AiBotRun | null> {
+  const all = await listAiBotRuns();
+  return all.find((r) => r.id === id) ?? null;
+}
+
+// --- AI Bot per-account config ----------------------------------------------
+
+export async function getAiBotConfig(): Promise<AiBotConfig> {
+  const raw = await read<unknown>(AI_BOT_CONFIG_KEY);
+  if (!raw || typeof raw !== "object") return { accounts: {} };
+  const obj = raw as { accounts?: Record<string, unknown> };
+  const accounts: Record<string, AiBotAccountConfig> = {};
+  for (const [k, v] of Object.entries(obj.accounts ?? {})) {
+    accounts[k] = normalizeStoredAccountConfig(v);
+  }
+  return { accounts };
+}
+
+function normalizeStoredAccountConfig(raw: unknown): AiBotAccountConfig {
+  if (!raw || typeof raw !== "object") return {};
+  const r = raw as Record<string, unknown>;
+  const urls: string[] = Array.isArray(r.websiteUrls)
+    ? (r.websiteUrls.filter(
+        (u) => typeof u === "string" && u.trim(),
+      ) as string[])
+    : [];
+  // Legacy single-URL field — promote to the array form on read so callers
+  // never have to think about both shapes.
+  if (
+    typeof r.websiteUrl === "string" &&
+    r.websiteUrl.trim() &&
+    !urls.includes(r.websiteUrl)
+  ) {
+    urls.unshift(r.websiteUrl);
+  }
+  return urls.length > 0 ? { websiteUrls: urls.slice(0, 5) } : {};
+}
+
+export async function getAiBotAccountConfig(
+  platform: PlatformSlug,
+  accountId: string,
+): Promise<AiBotAccountConfig> {
+  const cfg = await getAiBotConfig();
+  return cfg.accounts[aiBotConfigKey(platform, accountId)] ?? {};
+}
+
+export async function setAiBotAccountConfig(
+  platform: PlatformSlug,
+  accountId: string,
+  patch: AiBotAccountConfig,
+): Promise<void> {
+  const cfg = await getAiBotConfig();
+  const key = aiBotConfigKey(platform, accountId);
+  cfg.accounts[key] = { ...cfg.accounts[key], ...patch };
+  await write(AI_BOT_CONFIG_KEY, cfg);
+}
+
+export async function upsertAiBotRun(run: AiBotRun): Promise<void> {
+  const all = await listAiBotRuns();
+  const idx = all.findIndex((r) => r.id === run.id);
+  if (idx >= 0) all[idx] = run;
+  else all.push(run);
+  const trimmed = all
+    .sort((a, b) => a.startedAt.localeCompare(b.startedAt))
+    .slice(-AI_BOT_RUNS_LIMIT);
+  await write(AI_BOT_RUNS_KEY, trimmed);
 }
 

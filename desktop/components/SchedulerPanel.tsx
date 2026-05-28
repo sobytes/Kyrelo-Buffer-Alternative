@@ -130,6 +130,22 @@ export function SchedulerPanel({ platform }: { platform: PlatformMeta }) {
     loadPosts();
   }
 
+  async function cancelAllPending(pendingCount: number) {
+    if (pendingCount === 0 || !accountId) return;
+    if (
+      !confirm(
+        `Cancel all ${pendingCount} pending ${platform.label} post${pendingCount === 1 ? "" : "s"} for @${accountId}? This can't be undone.`,
+      )
+    )
+      return;
+    await fetch("/api/scheduler/posts/cancel-all", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ platform: platformSlug, accountId }),
+    });
+    loadPosts();
+  }
+
   async function removeFromHistory(id: string) {
     if (
       !confirm(
@@ -147,11 +163,17 @@ export function SchedulerPanel({ platform }: { platform: PlatformMeta }) {
 
   async function regigAndRescheduleAll(historyPosts: ScheduledPost[]) {
     if (!accountId || historyPosts.length === 0 || bulkRunning) return;
-    const startMs = new Date(bulkStartAt).getTime();
-    if (Number.isNaN(startMs)) {
+    const rawStartMs = new Date(bulkStartAt).getTime();
+    if (Number.isNaN(rawStartMs)) {
       setBulkError("Invalid start time");
       return;
     }
+    // Floor to "1 minute from now" so a stale start time (e.g. the modal sat
+    // open for a while, or the user picked a past minute) can never queue
+    // posts to fire immediately. Without this, jitter below would pull the
+    // first post even further into the past.
+    const earliestMs = Date.now() + 60_000;
+    const startMs = Math.max(rawStartMs, earliestMs);
     const intervalMs = Math.max(1, bulkIntervalMin) * 60_000;
     // ±20% of the interval, capped at 10 minutes, so the queue looks organic
     // instead of mechanically spaced. Cap keeps jitter < half-interval so post
@@ -185,7 +207,8 @@ export function SchedulerPanel({ platform }: { platform: PlatformMeta }) {
         }
         const jitter = (Math.random() * 2 - 1) * jitterRangeMs;
         // Snap to the nearest minute so the datetime in the UI doesn't show
-        // odd-second timestamps that themselves look scripted.
+        // odd-second timestamps that themselves look scripted. Floor at
+        // startMs so negative jitter can never push a post into the past.
         const rawMs = startMs + i * intervalMs + jitter;
         const snappedMs = Math.max(startMs, Math.round(rawMs / 60_000) * 60_000);
         const when = new Date(snappedMs).toISOString();
@@ -340,7 +363,22 @@ export function SchedulerPanel({ platform }: { platform: PlatformMeta }) {
       </section>
 
       <section>
-        <div className="label">Upcoming ({upcoming.length})</div>
+        <div className="mb-1 flex items-center justify-between gap-2">
+          <div className="label !mb-0">Upcoming ({upcoming.length})</div>
+          {upcoming.some((p) => p.status === "pending") && (
+            <button
+              onClick={() =>
+                cancelAllPending(
+                  upcoming.filter((p) => p.status === "pending").length,
+                )
+              }
+              className="text-[11px] text-zinc-500 hover:text-rose-400"
+              title={`Cancel every pending ${platform.label} post for this account`}
+            >
+              Cancel all pending
+            </button>
+          )}
+        </div>
         {upcoming.length === 0 ? (
           <div className="card text-sm text-zinc-500">Nothing queued.</div>
         ) : (
@@ -617,6 +655,7 @@ function TimelineRow({
   });
   const dueMs = new Date(post.scheduledFor).getTime() - now;
   const isPosting = post.status === "posting";
+  const isAi = post.proposedBy === "ai-bot";
   return (
     <div className="relative">
       <div className="pointer-events-none absolute -left-[26px] top-3.5 flex h-3 w-3 items-center justify-center">
@@ -629,10 +668,25 @@ function TimelineRow({
           }
         />
       </div>
-      <div className="card-tight">
+      <div
+        className={
+          "card-tight " +
+          (isAi
+            ? "border-accent/40 bg-accent/[0.04] shadow-[inset_3px_0_0_0_rgba(124,92,255,0.6)]"
+            : "")
+        }
+      >
         <div className="mb-1.5 flex items-center justify-between gap-2 text-xs">
           <div className="flex items-center gap-2">
             <span className="font-semibold tabular-nums text-zinc-100">{time}</span>
+            {isAi && (
+              <span
+                className="inline-flex items-center gap-1 rounded-full border border-accent/40 bg-accent/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-accent"
+                title="Proposed by the AI Bot — you scheduled this from a growth run."
+              >
+                AI proposed
+              </span>
+            )}
             <span className={isPosting ? "text-amber-300" : "text-accent"}>
               {isPosting
                 ? "Posting now…"
@@ -964,6 +1018,9 @@ function RescheduleModal({
       ? post.accountId
       : accounts[0]?.id ?? "",
   );
+  // Default to "now + 1 minute" rather than echoing the original post's time:
+  // the original is almost always in the past (it's a history post), and a
+  // past datetime here is the exact bug we're guarding against.
   const [scheduledFor, setScheduledFor] = useState(defaultDateTime());
   const [rewriting, setRewriting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -994,6 +1051,11 @@ function RescheduleModal({
 
   async function submit() {
     if (!text.trim() || !accountId || !scheduledFor) return;
+    const whenMs = new Date(scheduledFor).getTime();
+    if (Number.isNaN(whenMs) || whenMs < Date.now() - 30_000) {
+      setError("Pick a future time — the scheduled time is in the past.");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -1004,7 +1066,7 @@ function RescheduleModal({
           platform: post.platform,
           accountId,
           text,
-          scheduledFor: new Date(scheduledFor).toISOString(),
+          scheduledFor: new Date(whenMs).toISOString(),
         }),
       }).then((r) => r.json());
       if (r.error) {

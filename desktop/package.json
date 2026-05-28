@@ -1,6 +1,6 @@
 {
   "name": "kyrelo",
-  "version": "0.1.11",
+  "version": "0.1.13",
   "private": true,
   "description": "Local desktop scheduler and monitor for X, Threads, LinkedIn, Facebook and Instagram. Cross-post in one shot, queue per-platform, watch handles for new posts, and generate platform-tuned AI rewrites.",
   "author": "SoBytes",
