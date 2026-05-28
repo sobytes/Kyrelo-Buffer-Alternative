@@ -1,5 +1,13 @@
 # Kyrelo — Community Driven Buffer Alternative
 
+<p align="center">
+  <img alt="X (Twitter)" src="https://img.shields.io/badge/X-000000?style=for-the-badge&logo=x&logoColor=white" />
+  <img alt="Threads" src="https://img.shields.io/badge/Threads-000000?style=for-the-badge&logo=threads&logoColor=white" />
+  <img alt="LinkedIn" src="https://img.shields.io/badge/LinkedIn-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white" />
+  <img alt="Facebook" src="https://img.shields.io/badge/Facebook-1877F2?style=for-the-badge&logo=facebook&logoColor=white" />
+  <img alt="Instagram" src="https://img.shields.io/badge/Instagram-E4405F?style=for-the-badge&logo=instagram&logoColor=white" />
+</p>
+
 A local desktop app and marketing site for **Kyrelo** — the open-source, community-driven Buffer alternative for scheduling and monitoring social posts across **X, Threads, LinkedIn, Facebook and Instagram**.
 
 **Website:** [kyrelo.com](https://kyrelo.com/)
